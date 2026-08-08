@@ -10,7 +10,7 @@ from app.db.database import get_db
 from app.db.models import User
 from app.dependencies import Pagination
 from app.middleware.auth import ROLE_ADMINISTRATOR, ROLE_PROVIDER, require_roles
-from app.schemas.trial import TrialCreate, TrialListResponse, TrialResponse
+from app.schemas.trial import TrialCreate, TrialListResponse, TrialResponse, TrialUpdate
 from app.services.audit_logger import get_audit_logger
 from app.services.protocol_parser import parse_protocol_document, parse_structured_rules
 
@@ -74,6 +74,63 @@ def create_trial(
         resource_type="Trial",
         resource_id=trial.trial_id,
         data_accessed={"nct": body.nct_number, "warning_count": len(warnings)},
+    )
+    return trial_to_response(trial)
+
+
+@router.put("/{trial_id}", response_model=TrialResponse)
+def update_trial(
+    trial_id: str,
+    body: TrialUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(*_ROLE_ALLOWED)),
+):
+    """Update a trial protocol, bumping the protocol version (FR-033)."""
+    try:
+        trial_uuid = uuid.UUID(trial_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid trial id"
+        ) from exc
+
+    trial = repo.get_trial(db, trial_uuid)
+    if trial is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trial not found")
+
+    warnings: list[str] = []
+    rules: list[dict] | dict = trial.rules or []
+    if body.protocol_text:
+        rules, warnings = parse_protocol_document(body.protocol_text)
+    elif body.rules:
+        rules, warnings = parse_structured_rules([rule.model_dump() for rule in body.rules])
+
+    updates: dict = {"protocol_version": trial.protocol_version + 1}
+    if body.trial_name is not None:
+        updates["trial_name"] = body.trial_name
+    if body.status is not None:
+        updates["status"] = body.status.upper()
+    if body.protocol_text is not None or body.rules is not None:
+        updates["rules"] = rules
+    if body.inclusion_rules is not None:
+        updates["inclusion_rules"] = _rules_to_dicts(body.inclusion_rules)
+    if body.exclusion_rules is not None:
+        updates["exclusion_rules"] = _rules_to_dicts(body.exclusion_rules)
+
+    old_version = trial.protocol_version
+    trial = repo.update_trial(db, trial, **updates)
+
+    get_audit_logger().log(
+        db,
+        action="trial_updated",
+        user_id=user.user_id,
+        hospital_id=user.hospital_id,
+        resource_type="Trial",
+        resource_id=trial.trial_id,
+        data_accessed={
+            "old_version": old_version,
+            "new_version": trial.protocol_version,
+            "warning_count": len(warnings),
+        },
     )
     return trial_to_response(trial)
 

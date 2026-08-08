@@ -85,6 +85,14 @@ def create_trial(db: Session, **kwargs) -> Trial:
     return trial
 
 
+def update_trial(db: Session, trial: Trial, **kwargs) -> Trial:
+    for key, value in kwargs.items():
+        setattr(trial, key, value)
+    db.commit()
+    db.refresh(trial)
+    return trial
+
+
 def list_trials(db: Session, offset: int = 0, limit: int = 50):
     return db.query(Trial).order_by(Trial.created_at.desc()).offset(offset).limit(limit).all()
 

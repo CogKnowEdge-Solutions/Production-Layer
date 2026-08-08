@@ -17,6 +17,8 @@ from app.services.fhir_processor import (
     FHIRProcessor,
     FHIRValidationError,
     PatientData,
+    _age_on,
+    _parse_date,
     data_completeness,
 )
 
@@ -82,11 +84,12 @@ def evaluate_eligibility(
     data = _patient_data_from_bundle(body.fhir_bundle)
     if body.caregivers:
         for caregiver in body.caregivers:
+            caregiver_dob = _parse_date(caregiver.date_of_birth)
             data.caregivers.append(
                 CaregiverRecord(
                     name=caregiver.name,
                     relationship_type=caregiver.relationship_type,
-                    age=None,
+                    age=_age_on(caregiver_dob) if caregiver_dob else None,
                     verified=caregiver.authorization_status == "VERIFIED",
                     birth_date=caregiver.date_of_birth,
                 )

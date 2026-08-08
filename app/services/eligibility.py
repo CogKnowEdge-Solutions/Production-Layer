@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.db import repositories as repo
 from app.db.models import Assessment, Trial
+from app.middleware.metrics import ai_confidence_distribution, assessments_created_total
 from app.services.audit_logger import get_audit_logger
 from app.services.fhir_processor import PatientData, data_completeness
 from app.services.rules_engine import (
@@ -95,6 +96,9 @@ class EligibilityService:
         )
         completeness = data_completeness(patient_data)
         overall_confidence = round(avg_confidence * completeness, 2)
+
+        assessments_created_total.inc()
+        ai_confidence_distribution.observe(overall_confidence)
 
         assessment = repo.create_assessment(
             db,

@@ -75,6 +75,14 @@ class AllergyRecord:
 
 
 @dataclass
+class ProcedureRecord:
+    name: str
+    code: str | None = None
+    performed_date: str | None = None
+    status: str | None = None
+
+
+@dataclass
 class CaregiverRecord:
     name: str | None = None
     relationship_type: str | None = None
@@ -95,6 +103,7 @@ class PatientData:
     conditions: list[ConditionRecord] = field(default_factory=list)
     observations: list[ObservationRecord] = field(default_factory=list)
     allergies: list[AllergyRecord] = field(default_factory=list)
+    procedures: list[ProcedureRecord] = field(default_factory=list)
     caregivers: list[CaregiverRecord] = field(default_factory=list)
     missing_required: list[str] = field(default_factory=list)
 
@@ -213,6 +222,24 @@ def _allergy_from_resource(resource: dict) -> AllergyRecord:
     )
 
 
+def _procedure_from_resource(resource: dict) -> ProcedureRecord:
+    code = resource.get("code") or {}
+    name = _name_from_codings(code.get("coding")) or code.get("text")
+    icd_code = None
+    for coding in code.get("coding", []) or []:
+        _, c = _extract_coding(coding)
+        if c:
+            icd_code = c
+            break
+    return ProcedureRecord(
+        name=name or "unknown",
+        code=icd_code,
+        status=resource.get("status"),
+        performed_date=resource.get("performedDateTime")
+        or resource.get("performedPeriod", {}).get("start"),
+    )
+
+
 def _caregiver_from_resource(resource: dict) -> CaregiverRecord:
     name = resource.get("name") or resource.get("text") or {}
     name_str = None
@@ -271,6 +298,8 @@ class FHIRProcessor:
                 data.observations.append(_observation_from_resource(resource))
             elif rtype == "AllergyIntolerance":
                 data.allergies.append(_allergy_from_resource(resource))
+            elif rtype == "Procedure":
+                data.procedures.append(_procedure_from_resource(resource))
             elif rtype == "RelatedPerson":
                 data.caregivers.append(_caregiver_from_resource(resource))
         if not patient_seen:
@@ -306,7 +335,7 @@ class FHIRProcessor:
 def data_completeness(data: PatientData) -> float:
     """Score 0.0-1.0: presence of expected clinical sections."""
     scored = 0.0
-    total = 5
+    total = 6
     if data.birth_date:
         scored += 1
     if data.name:
@@ -316,6 +345,8 @@ def data_completeness(data: PatientData) -> float:
     if data.observations:
         scored += 1
     if data.allergies:
+        scored += 1
+    if data.procedures:
         scored += 1
     return round(scored / total, 2)
 

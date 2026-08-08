@@ -92,10 +92,12 @@ All routes are prefixed `/api/v1`.
 | GET    | `/patients/{id}`                  | PROVIDER, COORDINATOR         |
 | POST   | `/trials/create`                  | PROVIDER, COORDINATOR         |
 | GET    | `/trials`, `/trials/{id}`         | all roles                     |
+| PUT    | `/trials/{id}`                    | PROVIDER, ADMINISTRATOR (bumps protocol version) |
 | POST   | `/caregivers`                     | PROVIDER, COORDINATOR         |
 | GET    | `/patients/{id}/caregivers`       | all roles                     |
 | GET    | `/assessments`, `/assessments/{id}` | COORDINATOR, PROVIDER       |
 | PUT    | `/assessments/{id}/override`      | COORDINATOR, ADMINISTRATOR    |
+| PUT    | `/assessments/{id}/approve`       | COORDINATOR, ADMINISTRATOR    |
 | GET    | `/assessments/{id}/overrides`     | COORDINATOR, ADMINISTRATOR    |
 | GET    | `/audit/logs`                     | AUDITOR, ADMINISTRATOR        |
 | GET    | `/metrics`                        | public (Prometheus)           |

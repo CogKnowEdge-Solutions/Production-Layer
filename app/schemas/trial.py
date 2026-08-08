@@ -31,6 +31,15 @@ class TrialCreate(BaseModel):
     status: str = "ACTIVE"
 
 
+class TrialUpdate(BaseModel):
+    trial_name: str | None = None
+    protocol_text: str | None = None
+    rules: list[TrialRule] | None = None
+    inclusion_rules: list[TrialRule] | None = None
+    exclusion_rules: list[TrialRule] | None = None
+    status: str | None = None
+
+
 class TrialResponse(BaseModel):
     trial_id: UUID
     nct_number: str | None = None

@@ -201,6 +201,57 @@ def override_assessment(
     return assessment_to_response(assessment)
 
 
+@router.put("/{assessment_id}/approve", response_model=AssessmentResponse)
+def approve_assessment(
+    assessment_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(ROLE_COORDINATOR, ROLE_ADMINISTRATOR)),
+):
+    """Coordinator approves the AI recommendation, finalizing eligibility (FR-051)."""
+    try:
+        assessment_uuid = uuid.UUID(assessment_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid assessment id"
+        ) from exc
+
+    assessment = repo.get_assessment(db, assessment_uuid)
+    if assessment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found")
+
+    if assessment.review_status in ("APPROVED", "OVERRIDDEN"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Assessment is already {assessment.review_status.lower()}",
+        )
+
+    repo.update_assessment(
+        db,
+        assessment,
+        review_status="APPROVED",
+        final_status=assessment.overall_status,
+        reviewed_at=datetime.now(UTC),
+    )
+
+    get_audit_logger().log(
+        db,
+        action="assessment_approved",
+        user_id=user.user_id,
+        hospital_id=user.hospital_id,
+        resource_type="Assessment",
+        resource_id=assessment.assessment_id,
+        data_accessed={"final_status": assessment.overall_status},
+        result="success",
+        ip_address=request.client.host if request.client else None,
+    )
+
+    coordinator_approval_rate.labels("approved").inc()
+
+    db.refresh(assessment)
+    return assessment_to_response(assessment)
+
+
 @router.get("/{assessment_id}/overrides", response_model=list[OverrideResponse])
 def list_overrides(
     assessment_id: str,

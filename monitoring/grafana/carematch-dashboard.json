@@ -1,0 +1,83 @@
+{
+  "title": "CareMatch API",
+  "uid": "carematch-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["carematch", "api"],
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[5m])) by (path)",
+          "legendFormat": "{{path}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Request Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "5xx Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_errors_total[5m]))",
+          "legendFormat": "errors/s"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Assessments Created",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(assessments_created_total[5m])",
+          "legendFormat": "assessments/s"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "AI Confidence Distribution",
+      "type": "histogram",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(ai_confidence_distribution_bucket[5m])",
+          "legendFormat": "bucket {{le}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Coordinator Decisions",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(coordinator_decisions_total) by (decision)",
+          "legendFormat": "{{decision}}"
+        }
+      ]
+    }
+  ]
+}

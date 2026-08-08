@@ -17,6 +17,32 @@ services:
       timeout: 5s
       retries: 3
 
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    ports:
+      - "8100:8100"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-oss-20b:free}
+      - AGENT_API_URL=http://api:8000
+    depends_on:
+      - api
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://localhost:8000
+      - AGENT_URL=http://localhost:8100
+    depends_on:
+      - api
+      - agent
+
   postgres:
     image: postgres:15
     environment:

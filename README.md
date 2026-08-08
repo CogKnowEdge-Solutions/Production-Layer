@@ -14,27 +14,72 @@ API:
   OpenRouter) that operates the whole system in plain language, and
 - a **Prometheus + Grafana** observability stack.
 
+## System architecture
+
+```mermaid
+flowchart LR
+    User["Clinician / Coordinator"]
+    UI["Streamlit Web UI<br/><b>:8501</b> frontend/app.py"]
+    AG["AI Agent Team<br/><b>:8100</b> agent/main.py"]
+    API["FastAPI API<br/><b>:8000</b> app/main.py"]
+    PG[("PostgreSQL<br/>postgres:5432")]
+    RD[("Redis cache<br/>redis:6379")]
+    PROM["Prometheus<br/>:9090"]
+    GRAF["Grafana<br/>:3000"]
+    OR["OpenRouter<br/>(free LLM models)"]
+
+    User --> UI
+    User --> AG
+    UI -->|"REST /api/v1 (JWT)"| API
+    AG -->|"REST /api/v1 (JWT)"| API
+    UI -->|"POST /agent/chat"| AG
+    AG -->|"LLM tool-calling"| OR
+    API --> PG
+    API --> RD
+    API -->|"/metrics"| PROM
+    PROM --> GRAF
+    AG --> API
+```
+
 ## Repository layout
 
-```
-app/                    # API service (FastAPI)
-  api/v1/          HTTP routers (auth, patients, trials, caregivers, assessments, audit, metrics)
-  db/              SQLAlchemy models and repositories
-  middleware/      RBAC auth, audit, metrics, rate limiting, error handlers
-  services/        FHIR processing, rules engine, protocol parser, eligibility, OAuth, security
-  schemas/         Pydantic request/response models
-agent/                  # AI agent team (LangChain + OpenRouter)
-  main.py          FastAPI app: POST /agent/chat
-  coordinator.py   coordinator agent that delegates to 6 subagents
-  subagents.py     auth, trials, eligibility, assessments, caregivers, audit specialists
-  tools.py         LangChain tools wrapping the CareMatch REST API
-  model.py         OpenRouter ChatOpenAI factory (retries, free-tier)
-  smoke_test.py    live end-to-end agent check (run manually)
-frontend/               # Web UI (Streamlit)
-  app.py           login + trials/evaluate/review/caregivers/audit/agent tabs
-monitoring/             # Grafana dashboard provisioning
-prometheus/             # Prometheus scrape + alert rules
-kubernetes/             # Helm-less manifests for the API, Redis, and Postgres
+```mermaid
+flowchart TD
+    subgraph API["<b>app/</b> — FastAPI service"]
+        direction TB
+        R["api/v1/<br/>auth · patients · trials · caregivers<br/>assessments · audit · metrics"]
+        S["services/<br/>fhir_processor · rules_engine<br/>protocol_parser · eligibility"]
+        D["db/<br/>SQLAlchemy models + repositories"]
+        M["middleware/<br/>RBAC auth · audit · metrics · rate limiting"]
+        SC["schemas/<br/>Pydantic request/response"]
+        R --> S
+        S --> D
+        M -.-> R
+        SC -.-> R
+    end
+
+    subgraph AGENT["<b>agent/</b> — AI agent team"]
+        direction TB
+        A1["main.py<br/>POST /agent/chat"]
+        A2["coordinator.py<br/>delegates to subagents"]
+        A3["subagents.py<br/>6 specialists"]
+        A4["tools.py<br/>LangChain tools → REST"]
+        A1 --> A2 --> A3 --> A4
+    end
+
+    subgraph FE["<b>frontend/</b> — Streamlit UI"]
+        F1["app.py<br/>login + 6 tabs"]
+    end
+
+    subgraph OPS["<b>ops</b> — observability & deployment"]
+        P1["prometheus/ scrape + alert rules"]
+        P2["monitoring/ Grafana dashboards"]
+        P3["kubernetes/ manifests"]
+        P4["docker-compose.yml"]
+    end
+
+    FE --> R
+    AGENT --> R
 ```
 
 ## Quick start
@@ -108,6 +153,43 @@ subset bound to the CareMatch REST API, then synthesizes their reports:
 | `caregivers`    | Manage patient caregivers                             |
 | `audit`         | Read the audit trail and system metrics               |
 
+### Multi-agent orchestration
+
+A single user request can fan out across several subagents. The coordinator
+decides the routing, and every subagent shares one `AgentSession`, so a token
+obtained by `auth` is available to every tool:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Coord as Coordinator<br/>(coordinator.py)
+    participant Auth as auth subagent
+    participant Tri as trials subagent
+    participant Eli as eligibility subagent
+    participant Rev as assessments subagent
+    participant API as CareMatch API
+
+    User->>Coord: "Create a diabetes trial, evaluate Jane, then review the result"
+    Coord->>Auth: delegate login (admin / password)
+    Auth->>API: POST /auth/token
+    API-->>Auth: access_token
+    Auth-->>Coord: "Logged in" (token cached in AgentSession)
+    Coord->>Tri: create trial (bullet protocol text)
+    Tri->>API: POST /trials/create
+    API-->>Tri: trial_id + N parsed rules
+    Tri-->>Coord: trial_id
+    Coord->>Eli: evaluate patient FHIR bundle
+    Eli->>API: POST /patients/evaluate-eligibility
+    API-->>Eli: assessment_id + per-rule evidence
+    Eli-->>Coord: assessment_id, overall status
+    Coord->>Rev: approve assessment
+    Rev->>API: PUT /assessments/{id}/approve
+    API-->>Rev: review_status=APPROVED, final_status
+    Rev-->>Coord: final eligibility
+    Coord-->>User: plain-language summary + IDs
+```
+
 Models come from OpenRouter (free tier by default — `openai/gpt-oss-20b:free`).
 
 ```bash
@@ -138,6 +220,26 @@ Design notes:
 
 ## Eligibility engine
 
+```mermaid
+flowchart LR
+    subgraph INPUT["Input"]
+        P["Protocol document<br/>(free text or structured rules)"]
+        F["FHIR R4 Patient / Bundle"]
+    end
+    P --> PP["protocol_parser.py<br/>classify lines → rule objects"]
+    PP --> RULES["Rules<br/>age_range · medication · diagnosis<br/>lab_value · temporal · caregiver · description<br/>category: inclusion | exclusion"]
+    F --> FP["fhir_processor.py<br/>normalize → PatientData<br/>+ data completeness score"]
+    RULES --> RE["rules_engine.py<br/>evaluate_rule() per rule"]
+    FP --> RE
+    RE --> AGG{"eligibility.py<br/>aggregate"}
+    AGG -->|"any rule UNCLEAR"| U["UNCLEAR"]
+    AGG -->|"inclusion fails or exclusion matches"| I["LIKELY_INELIGIBLE"]
+    AGG -->|"otherwise"| E["LIKELY_ELIGIBLE"]
+    U --> ASM["Assessment<br/>overall + ai_confidence + evidence<br/>review_status = PENDING"]
+    I --> ASM
+    E --> ASM
+```
+
 1. **Protocol parsing** — `POST /trials/create` accepts either a free-text
    protocol document or pre-structured rules. The parser classifies each
    bullet line into a rule type and keeps unclassifiable lines as
@@ -158,11 +260,38 @@ Design notes:
    rule results with mandatory reasoning. The override's impact on overall
    eligibility is tracked and audited.
 
+### Human-in-the-loop review
+
+```mermaid
+flowchart TD
+    A["Assessment created<br/>review_status = PENDING"] --> R{"Coordinator<br/>decision"}
+    R -->|"approve (FR-051)"| AP["review_status = APPROVED<br/>final_status = overall"]
+    R -->|"override a rule (FR-053)"| OV["PUT /assessments/{id}/override<br/>reasoning REQUIRED"]
+    OV --> RC{"Recalculate overall<br/>from all rule statuses"}
+    RC -->|"any UNCLEAR"| U2["overall = UNCLEAR"]
+    RC -->|"inclusion fails / exclusion matches"| I2["overall = LIKELY_INELIGIBLE"]
+    RC -->|"otherwise"| E2["overall = LIKELY_ELIGIBLE"]
+    U2 --> OD["review_status = OVERRIDDEN<br/>override_count++<br/>impact_on_eligibility tracked"]
+    I2 --> OD
+    E2 --> OD
+    AP --> AUD["audit_logger.log()"]
+    OD --> AUD
+    AUD --> DB[("PostgreSQL")]
+```
+
 ## Auditing & compliance
 
 Every auth event, data access, assessment creation, approval, and override is
 written to an audit trail with PII redacted for HIPAA compliance. AUDITOR and
 ADMINISTRATOR roles can read the trail at `/api/v1/audit/logs`.
+
+```mermaid
+flowchart LR
+    E["Event<br/>auth · data access · approve · override"] --> LOG["audit_logger.py<br/>PII redacted"]
+    LOG --> DB[("PostgreSQL<br/>audit_logs")]
+    AUD["AUDITOR / ADMIN"] -->|"GET /api/v1/audit/logs"| LOG
+    DB --> LOG
+```
 
 ## Kubernetes
 

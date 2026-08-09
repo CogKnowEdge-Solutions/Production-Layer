@@ -13,6 +13,7 @@ class AgentSession:
     token: str | None = None
     last_result: str = ""
     notes: list[str] = field(default_factory=list)
+    actions: list[str] = field(default_factory=list)
 
     def has_token(self) -> bool:
         return bool(self.token)

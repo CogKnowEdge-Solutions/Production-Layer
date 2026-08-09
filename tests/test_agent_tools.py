@@ -108,3 +108,46 @@ def test_agent_settings_defaults():
     settings = AgentSettings(_env_file=None)
     assert settings.agent_api_url == "http://localhost:8000"
     assert settings.openrouter_model
+
+
+def test_tools_record_actions_on_session():
+    session = AgentSession(base_url="http://testserver")
+    session.token = "tok"
+    tools = {t.name: t for t in build_tools(session)}
+
+    from agent.carematch_client import CareMatchClient
+
+    original = CareMatchClient._request
+
+    def fake_request(self, method, path, token=None, **kwargs):
+        if path == "/api/v1/trials":
+            return {"items": [], "total": 0, "page": 1, "page_size": 50}
+        if path.startswith("/api/v1/trials/") and method == "GET":
+            return {"trial_id": "t1", "trial_name": "T", "rules": []}
+        raise AssertionError(f"unexpected path {path}")
+
+    CareMatchClient._request = fake_request
+    try:
+        tools["list_trials"].invoke({"limit": 50})
+        tools["get_trial"].invoke({"trial_id": "t1"})
+    finally:
+        CareMatchClient._request = original
+
+    assert session.actions == ["list_trials", "get_trial"]
+
+
+def test_metrics_store_persists_and_computes_saved_time(tmp_path):
+    from agent.metrics_store import AgentMetricsStore
+
+    path = str(tmp_path / "metrics.json")
+    store = AgentMetricsStore(path)
+
+    record = store.record_run(["create_trial", "evaluate_eligibility"], duration_s=60.0)
+    assert record["manual_minutes"] == 35.0
+    assert record["saved_minutes"] > 0
+    assert store.summary()["runs"] == 1
+    assert store.summary()["actions"]["create_trial"] == 1
+
+    store2 = AgentMetricsStore(path)
+    assert store2.summary()["runs"] == 1
+    assert store2.summary()["saved_minutes"] == record["saved_minutes"]

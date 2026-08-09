@@ -109,6 +109,16 @@ def login(username: str, password: str) -> dict:
     )
 
 
+def agent_metrics() -> dict:
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(f"{agent_url()}/agent/metrics")
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Auth sidebar
 # ---------------------------------------------------------------------------
@@ -143,6 +153,34 @@ with st.sidebar:
 if not st.session_state.get("token"):
     st.info("Log in with one of the seed accounts on the left to continue.")
     st.stop()
+
+# ---------------------------------------------------------------------------
+# Top metrics: AI agent time saved
+# ---------------------------------------------------------------------------
+_metrics = agent_metrics()
+if _metrics.get("runs"):
+    st.subheader("AI Agent Impact")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "Time saved",
+        f"{_metrics['saved_minutes']:.0f} min",
+        delta=None,
+        help="Estimated time the agent team saved vs. doing the same tasks manually.",
+    )
+    c2.metric("Agent runs", _metrics.get("runs", 0))
+    c3.metric(
+        "Actions automated",
+        sum(_metrics.get("actions", {}).values()),
+        help="Total tool actions executed by the agent team.",
+    )
+    c4.metric(
+        "Manual effort equivalent",
+        f"{_metrics.get('manual_minutes', 0):.0f} min",
+        help="Estimated minutes a human would have spent on these tasks.",
+    )
+    st.divider()
+elif not _metrics:
+    st.caption("🤖 AI agent team not running — agent metrics unavailable.")
 
 # ---------------------------------------------------------------------------
 # Tabs

@@ -10,6 +10,7 @@ class AgentSettings(BaseSettings):
     openrouter_model: str = "openai/gpt-oss-20b:free"
     agent_api_url: str = "http://localhost:8000"
     agent_max_retries: int = 2
+    agent_metrics_path: str = "agent_metrics.json"
 
 
 @lru_cache

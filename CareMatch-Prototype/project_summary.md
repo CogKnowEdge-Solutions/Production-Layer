@@ -35,8 +35,8 @@ CareMatch is a lightweight reasoning layer, not a black box. It never gives a fl
 | Layer | What It Is | Status |
 |---|---|---|
 | **Reasoning engine** | Python core that walks a trial's rules one at a time against a patient record, calling an LLM per rule | ✅ Built, tested with a real LLM |
-| **API** | FastAPI doorway — register trials, run assessments, record coordinator decisions | ✅ Built, 17/17 tests passing |
-| **Dashboard** | React/TanStack Start UI — New Assessment, Assessment Review, Trial Setup, Trials | ✅ Built, wired to the real API, browser-tested |
+| **API** | FastAPI doorway — register trials, run assessments, list assessment history, record coordinator decisions | ✅ Built, 18/18 tests passing |
+| **Dashboard** | React/TanStack Start UI — New Assessment, Assessment Review, Trial Setup, Trials, History | ✅ Built, wired to the real API, browser-tested |
 | **Docker** | All services containerized, one `docker-compose up` starts everything | ✅ 4 containers running together |
 | **Observability** | Prometheus + Grafana, built into the real API (not a separate toy service) | ✅ Real metrics, real dashboard |
 
@@ -150,6 +150,10 @@ The hard part was the data already in the database. Older assessments stored dec
 
 The dashboard gained a fourth page — **Trials** — which lists every registered trial and its rules in a plain, expandable view. It sits in the top navigation alongside New Assessment, Assessment Review, and Trial Setup.
 
+### The History page
+
+The dashboard gained a fifth page — **History** — which lists every assessment that has ever been run, newest first, one lightweight row each: patient ID, trial ID, the AI's suggested status, and the coordinator's decision (or "Undecided"). Clicking a row opens that assessment's full evidence and decision in the existing Review page — no duplicate detail view. The backend side is a `GET /assessments` endpoint backed by a `list_assessments()` query that deliberately returns the summary fields without the heavy per-rule results (those stay on the per-id endpoint). Covered by a test that creates four assessments — accepted, denied, needs-more-review, and one left undecided — and confirms all four appear with the correct fields.
+
 ---
 
 ## What's Genuinely Left (Not Code)
@@ -169,7 +173,7 @@ Both of these need an actual organization adopting this system — they are not 
 flowchart TD
     ROOT[carematch/] --> RE[reasoning_engine/<br/>Phase 1 — core AI reasoning logic]
     ROOT --> API[api/<br/>Phase 2 — FastAPI doorway + SQLite persistence + Prometheus metrics]
-    ROOT --> DASH[dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials]
+    ROOT --> DASH[dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials, History]
     ROOT --> EV[run_evaluation.py<br/>The 12-patient accuracy test script]
     ROOT --> PS[project_summary.md<br/>This file, at the project root alongside README.md]
     ROOT --> SETUP[setup_guide.md<br/>Step-by-step setup instructions]

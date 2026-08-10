@@ -225,6 +225,23 @@ def get_assessment(assessment_id: str) -> dict | None:
         }
 
 
+def list_assessments() -> list[dict]:
+    """Lightweight summary of every assessment, newest first, for the
+    History view. Deliberately NO rule_results -- the full nested detail
+    stays on get_assessment()/GET /assessments/{id}. Left join keeps
+    undecided assessments in the list with decision/decision_reason None."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT a.assessment_id, a.trial_id, a.patient_id, "
+            "a.suggested_status, a.created_at, "
+            "d.decision, d.decision_reason "
+            "FROM assessments a "
+            "LEFT JOIN decisions d ON d.assessment_id = a.assessment_id "
+            "ORDER BY a.created_at DESC, a.assessment_id DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def set_decision(assessment_id: str, decision: str, reason: str | None) -> bool:
     """Record the coordinator's decision. Returns False (and records
     nothing) if the assessment doesn't exist -- the caller turns that into

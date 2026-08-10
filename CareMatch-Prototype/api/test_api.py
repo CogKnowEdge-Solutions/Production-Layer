@@ -170,6 +170,82 @@ def test_assess_with_fake_llm_returns_correct_schema():
         assert "confidence" not in rule_result
 
 
+def test_list_assessments_returns_lightweight_summary_of_every_assessment():
+    """The History endpoint: every assessment appears exactly once, with
+    the summary fields, no rule_results detail, newest first. Includes a
+    mix of decisions -- accepted, denied, needs_more_review -- plus one
+    left undecided (decision must be None, not a crash or a phantom)."""
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-HISTORY-TEST",
+            "trial_name": "History Test Trial",
+            "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
+        },
+    )
+
+    # Four assessments: three with a decision, one deliberately undecided.
+    created_ids = []
+    for patient_id in ("P-HIST-1", "P-HIST-2", "P-HIST-3", "P-HIST-4"):
+        create_resp = client.post(
+            "/assess",
+            json={"trial_id": "T-HISTORY-TEST", "patient_id": patient_id, "patient_record": "record"},
+        )
+        assert create_resp.status_code == 201
+        created_ids.append(create_resp.json()["assessment_id"])
+
+    # Decisions: accepted, denied, needs_more_review. The 4th stays undecided.
+    decisions = [
+        ("accepted", "Clean case, accepted"),
+        ("denied", "Record contradicts inclusion criterion"),
+        ("needs_more_review", "Awaiting pathology report"),
+    ]
+    for assessment_id, (decision, reason) in zip(created_ids, decisions):
+        decision_resp = client.post(
+            f"/assessments/{assessment_id}/decision",
+            json={"decision": decision, "reason": reason},
+        )
+        assert decision_resp.status_code == 200
+
+    r = client.get("/assessments")
+    assert r.status_code == 200
+    rows = r.json()
+
+    # Exactly our 4 show up (plus anything earlier tests created -- the
+    # key assertions below are membership + correct fields per id).
+    by_id = {row["assessment_id"]: row for row in rows}
+    for assessment_id in created_ids:
+        assert assessment_id in by_id
+
+    # Summary shape: no rule_results, but all the header fields present.
+    row = by_id[created_ids[0]]
+    assert set(row.keys()) == {
+        "assessment_id",
+        "trial_id",
+        "patient_id",
+        "suggested_status",
+        "decision",
+        "decision_reason",
+        "created_at",
+    }
+    assert row["trial_id"] == "T-HISTORY-TEST"
+    assert row["suggested_status"] == "needs_more_info"  # fake LLM always
+    assert isinstance(row["created_at"], str) and row["created_at"]
+
+    # Decision values come through correctly per assessment.
+    assert by_id[created_ids[0]]["decision"] == "accepted"
+    assert by_id[created_ids[0]]["decision_reason"] == "Clean case, accepted"
+    assert by_id[created_ids[1]]["decision"] == "denied"
+    assert by_id[created_ids[2]]["decision"] == "needs_more_review"
+    assert by_id[created_ids[3]]["decision"] is None  # undecided
+    assert by_id[created_ids[3]]["decision_reason"] is None
+
+    # Newest first: created_at is second-granularity, so rows may share a
+    # timestamp -- the sequence must still never increase over time.
+    created_times = [row["created_at"] for row in rows]
+    assert created_times == sorted(created_times, reverse=True)
+
+
 def test_get_assessment_by_id():
     client.post(
         "/trials",

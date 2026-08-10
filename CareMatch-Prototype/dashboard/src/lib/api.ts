@@ -57,6 +57,19 @@ export type AssessmentRecord = {
   model_used: string;
 };
 
+// One lightweight row from GET /assessments (the History list). Deliberately
+// lacks the nested rule_results -- that's what getAssessment() is for. The
+// backend sorts these newest first.
+export type AssessmentSummary = {
+  assessment_id: string;
+  trial_id: string;
+  patient_id: string;
+  suggested_status: SuggestedStatus;
+  decision: string | null;
+  decision_reason: string | null;
+  created_at: string;
+};
+
 export type TrialRule = {
   rule_id: string;
   rule_text: string;
@@ -132,6 +145,11 @@ export async function runAssessment(input: {
 
 export async function getAssessment(assessmentId: string): Promise<AssessmentRecord> {
   const res = await fetch(`${API_BASE}/assessments/${encodeURIComponent(assessmentId)}`);
+  return handle(res);
+}
+
+export async function listAssessments(): Promise<AssessmentSummary[]> {
+  const res = await fetch(`${API_BASE}/assessments`);
   return handle(res);
 }
 

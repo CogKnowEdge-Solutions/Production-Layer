@@ -198,7 +198,7 @@ flowchart TD
     API --> API_REQ[requirements.txt]
     ROOT --> DASH[dashboard/<br/>The webpage the coordinator actually uses]
     DASH --> DASH_SRC[src/]
-    DASH_SRC --> DASH_ROUTES[routes/<br/>The 4 pages: New Assessment, Assessment Review, Trial Setup, Trials]
+    DASH_SRC --> DASH_ROUTES[routes/<br/>The 5 pages: New Assessment, Assessment Review, Trial Setup, Trials, History]
     DASH_SRC --> DASH_COMP[components/<br/>Reusable pieces, like the rule result cards]
     DASH_SRC --> DASH_HOOKS[hooks/<br/>Small reusable bits of frontend logic]
     DASH_SRC --> DASH_API[lib/api.ts<br/>The code that talks to the real API]
@@ -240,6 +240,7 @@ flowchart TD
 | GET | `/trials` | List every trial that's been registered |
 | GET | `/trials/{trial_id}` | Look up one specific trial |
 | POST | `/assess` | Run a real eligibility check for one patient against one trial |
+| GET | `/assessments` | List every assessment ever run, newest first (History view) |
 | GET | `/assessments/{assessment_id}` | Look up a past assessment |
 | POST | `/assessments/{assessment_id}/decision` | Record the coordinator's decision — Accept, Deny, or Needs More Review |
 

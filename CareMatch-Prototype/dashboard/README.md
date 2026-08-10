@@ -23,4 +23,5 @@ npm run dev
 - [x] Assessment Review screen (evidence display, inclusion/exclusion columns, accept/deny/needs-more-review flow)
 - [x] Trial Setup screen
 - [x] Trials list screen (every registered trial with its rules)
+- [x] History screen (every assessment ever run, newest first, click-through to Review)
 - [x] Wired to the real CareMatch API

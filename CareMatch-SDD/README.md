@@ -82,15 +82,69 @@ flowchart TD
     AGENT --> R
 ```
 
-## Quick start
+## Run locally
+
+### 1. Clone (this folder only)
+
+CareMatch-SDD lives in the `Production-Layer` monorepo. To fetch only this
+folder without the rest of the repo, use a sparse checkout:
 
 ```bash
-pip install -r requirements.txt
-cp .env.example .env          # adjust secrets for production
-uvicorn app.main:app --reload
+git clone --depth 1 --filter=blob:none --sparse https://github.com/CogKnowEdge-Solutions/Production-Layer.git
+cd Production-Layer
+git sparse-checkout set CareMatch-SDD
+cd CareMatch-SDD
 ```
 
-Interactive docs: http://localhost:8000/docs · Metrics: http://localhost:8000/api/v1/metrics
+### 2. Environment setup
+
+Requires Python 3.11+.
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # macOS/Linux; .\.venv\Scripts\activate on Windows
+pip install -r requirements.txt
+cp .env.example .env          # adjust secrets for production
+```
+
+### 3. Backend API (FastAPI)
+
+```bash
+uvicorn app.main:app --reload                       # http://localhost:8000
+```
+
+- Interactive docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
+- Prometheus metrics: http://localhost:8000/api/v1/metrics
+- On first startup the DB is auto-created (SQLite by default) and seeded with
+  four dev users; the seed user table below.
+
+Optional services used by the API: PostgreSQL (set `DATABASE_URL`) and Redis
+(`REDIS_URL`). Without Redis the app falls back to an in-memory cache.
+
+### 4. Web UI (Streamlit)
+
+```bash
+pip install -r frontend/requirements.txt
+streamlit run frontend/app.py        # http://localhost:8501
+# API_URL / AGENT_URL env vars override the default localhost endpoints
+```
+
+### 5. AI agent team (optional)
+
+```bash
+pip install -r agent/requirements.txt
+cp .env.example .env                 # already done above; add OPENROUTER_API_KEY
+uvicorn agent.main:app --port 8100   # http://localhost:8100 (POST /agent/chat)
+# OPENROUTER_API_KEY + OPENROUTER_MODEL come from .env (see .env.example)
+```
+
+### 6. Verify
+
+```bash
+pip install -r requirements-dev.txt
+pytest                        # full suite (API + agent tools + frontend)
+ruff check app agent frontend tests
+```
 
 Four seed users are created on first startup (dev only):
 
@@ -101,10 +155,24 @@ Four seed users are created on first startup (dev only):
 | `provider`    | PROVIDER      | `provider-password-change-me` |
 | `auditor`     | AUDITOR       | `auditor-password-change-me` |
 
-## Docker (full stack)
+## Run in deployment
+
+### Option A — Docker Compose (full stack)
+
+Runs the API, agent, UI, Postgres, Redis, Prometheus, Alertmanager, and Grafana
+in production mode (`ENV=production`) against Postgres.
 
 ```bash
-docker compose up --build     # API, agent, UI, Postgres, Redis, Prometheus, Grafana
+# 1. Set production secrets in your environment (used by compose):
+export JWT_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+export OPENROUTER_API_KEY="your-openrouter-key"   # required for the agent
+
+# 2. Build and start everything:
+docker compose up --build -d
+
+# 3. Tail logs / stop:
+docker compose logs -f
+docker compose down          # add -v to drop the Postgres volume (data loss!)
 ```
 
 | Service       | URL                                    |
@@ -116,6 +184,55 @@ docker compose up --build     # API, agent, UI, Postgres, Redis, Prometheus, Gra
 | Grafana       | http://localhost:3000 (admin/admin)    |
 | Postgres      | `localhost:5432` (carematch/carematch) |
 | Redis         | `localhost:6379`                       |
+
+For a production host, point the API and UI `ports` at a TLS-terminating
+reverse proxy (nginx/Caddy/Traefik) and set strong `SEED_*` credentials plus a
+real `JWT_SECRET` and `DATABASE_URL` before first boot.
+
+### Option B — Kubernetes
+
+Prereqs: a cluster with `kubectl` configured, an image registry, and (if you
+want Postgres managed in-cluster) a way to persist `postgres` data.
+
+1. **Build and push the image**:
+
+   ```bash
+   docker build -t <registry>/carematch-api:latest .
+   docker push <registry>/carematch-api:latest
+   ```
+
+2. **Set production secrets** (the sample secret ships with dev defaults —
+   rotate `jwt-secret` and `database-url` before applying):
+
+   ```bash
+   kubectl create secret generic carematch-secrets \
+     --from-literal=database-url='postgresql+psycopg://carematch:CHANGE_ME@postgres:5432/carematch' \
+     --from-literal=jwt-secret='CHANGE_ME_IN_PRODUCTION' \
+     --dry-run=client -o yaml | kubectl apply -f -
+   ```
+
+3. **Point the manifest at your image and apply** — edit
+   `kubernetes/manifests.yaml` to replace `image: carematch-api:latest` with
+   your pushed image, then:
+
+   ```bash
+   kubectl apply -f kubernetes/manifests.yaml
+   kubectl rollout status deployment/carematch-api
+   kubectl get pods,svc -l app=carematch
+   ```
+
+   This deploys the API (2 replicas with readiness/liveness probes), a Redis
+   service, and the `carematch-secrets` Secret. Postgres is expected to be
+   reachable at `postgres:5432`; provision it in-cluster or point
+   `database-url` at a managed instance (RDS, Cloud SQL, etc.). Expose the
+   `carematch-api` Service to the internet via an ingress or LoadBalancer.
+
+4. **Scale and update**:
+
+   ```bash
+   kubectl scale deployment/carematch-api --replicas=4
+   kubectl set image deployment/carematch-api api=<registry>/carematch-api:<tag>
+   ```
 
 ## Web UI (Streamlit)
 
@@ -292,12 +409,6 @@ flowchart LR
     AUD["AUDITOR / ADMIN"] -->|"GET /api/v1/audit/logs"| LOG
     DB --> LOG
 ```
-
-## Kubernetes
-
-`kubectl apply -f kubernetes/manifests.yaml` deploys the API (2 replicas with
-readiness/liveness probes), a Redis service, and the Postgres secret. Set the
-`carematch-secrets` values for production.
 
 ## Environment variables
 

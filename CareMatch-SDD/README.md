@@ -14,6 +14,31 @@ API:
   OpenRouter) that operates the whole system in plain language, and
 - a **Prometheus + Grafana** observability stack.
 
+## Table of Contents
+
+- [System architecture](#system-architecture)
+- [Repository layout](#repository-layout)
+- [Run locally](#run-locally)
+  - [1. Clone (this folder only)](#1-clone-this-folder-only)
+  - [2. Environment setup](#2-environment-setup)
+  - [3. Backend API (FastAPI)](#3-backend-api-fastapi)
+  - [4. Web UI (Streamlit)](#4-web-ui-streamlit)
+  - [5. AI agent team (optional)](#5-ai-agent-team-optional)
+  - [6. Verify](#6-verify)
+- [Run in deployment](#run-in-deployment)
+  - [Option A — Docker Compose (full stack)](#option-a--docker-compose-full-stack)
+  - [Option B — Kubernetes](#option-b--kubernetes)
+- [Web UI (Streamlit)](#web-ui-streamlit)
+- [AI agent team](#ai-agent-team)
+  - [Multi-agent orchestration](#multi-agent-orchestration)
+- [Eligibility engine](#eligibility-engine)
+  - [Human-in-the-loop review](#human-in-the-loop-review)
+- [Auditing & compliance](#auditing--compliance)
+- [Environment variables](#environment-variables)
+- [Testing & quality](#testing--quality)
+- [API surface](#api-surface)
+- [Key flows](#key-flows)
+
 ## System architecture
 
 ```mermaid

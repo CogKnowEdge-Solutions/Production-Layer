@@ -1,0 +1,14 @@
+# Keep build contexts lean and never ship secrets into an image.
+**/node_modules
+**/.output
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.git
+**/.env
+**/.env.*
+**/data
+.git
+observability
+docs
+*.md

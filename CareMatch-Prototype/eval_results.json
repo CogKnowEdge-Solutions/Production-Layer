@@ -1,0 +1,482 @@
+[
+  {
+    "patient_id": "P-01",
+    "expected": "likely_eligible",
+    "record": "60-year-old patient. Diagnosed with Type 2 Diabetes in 2018. Current medications: Metformin 500mg twice daily.",
+    "actual": "likely_eligible",
+    "match": true,
+    "raw": {
+      "assessment_id": "67207011-cda7-4ba9-a2f6-4388d7144fd5",
+      "assessment": {
+        "patient_id": "P-01",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_eligible",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "60-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Diagnosed with Type 2 Diabetes in 2018"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "Current medications: Metformin 500mg twice daily."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-02",
+    "expected": "likely_excluded",
+    "record": "55-year-old patient. Type 2 Diabetes diagnosed 2020. Current medications: Warfarin 5mg daily, Metformin 500mg twice daily.",
+    "actual": "likely_excluded",
+    "match": true,
+    "raw": {
+      "assessment_id": "1a7dcbac-7e92-4949-a0bc-591ac479dde7",
+      "assessment": {
+        "patient_id": "P-02",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_excluded",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "55-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2020"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "matches",
+            "evidence": "Current medications: Warfarin 5mg daily"
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-03",
+    "expected": "likely_excluded",
+    "record": "35-year-old patient. Type 2 Diabetes diagnosed 2022. No current medications reported.",
+    "actual": "likely_excluded",
+    "match": true,
+    "raw": {
+      "assessment_id": "8e4c6697-93ed-43d5-b46b-51c4e8376d29",
+      "assessment": {
+        "patient_id": "P-03",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_excluded",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "does_not_match",
+            "evidence": "35-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2022"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "No current medications reported."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-04",
+    "expected": "likely_excluded",
+    "record": "60-year-old patient. Diagnoses: Hypertension only. No history of diabetes. Current medications: Lisinopril 10mg daily.",
+    "actual": "likely_excluded",
+    "match": true,
+    "raw": {
+      "assessment_id": "3c59eb11-f47d-4741-836f-1c33b41a285a",
+      "assessment": {
+        "patient_id": "P-04",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_excluded",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "60-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "does_not_match",
+            "evidence": "No history of diabetes"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "Current medications: Lisinopril 10mg daily."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-05",
+    "expected": "needs_more_info",
+    "record": "Patient presenting for diabetes management follow-up. Type 2 Diabetes diagnosed 2019. Current medications: Metformin. Date of birth not recorded in this note.",
+    "actual": "needs_more_info",
+    "match": true,
+    "raw": {
+      "assessment_id": "1079f38a-9340-499b-ae8d-0109dd9a26e8",
+      "assessment": {
+        "patient_id": "P-05",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "needs_more_info",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "unclear",
+            "evidence": "Date of birth not recorded in this note."
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2019"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "Current medications: Metformin."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-06",
+    "expected": "needs_more_info",
+    "record": "60-year-old patient. Diagnoses: Hypertension. Note: no diabetes screening on file. Current medications: Amlodipine 5mg daily.",
+    "actual": "needs_more_info",
+    "match": true,
+    "raw": {
+      "assessment_id": "d1903f7a-60d3-42f3-91ce-0d1958623e2f",
+      "assessment": {
+        "patient_id": "P-06",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "needs_more_info",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "60-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "unclear",
+            "evidence": "no diabetes screening on file"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "Current medications: Amlodipine 5mg daily."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-07",
+    "expected": "needs_more_info",
+    "record": "60-year-old patient. Type 2 Diabetes diagnosed 2017. Current medication list incomplete in this record -- patient reports 'a few pills' but names were not documented.",
+    "actual": "needs_more_info",
+    "match": true,
+    "raw": {
+      "assessment_id": "3b406898-6d5b-406d-bd3c-6ab030cae9f2",
+      "assessment": {
+        "patient_id": "P-07",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "needs_more_info",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "60-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2017"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "unclear",
+            "evidence": "Current medication list incomplete in this record -- patient reports 'a few pills' but names were not documented."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-08",
+    "expected": "likely_eligible",
+    "record": "72-year-old patient. Type 2 Diabetes diagnosed 2015, managed with insulin. No other current medications reported.",
+    "actual": "likely_eligible",
+    "match": true,
+    "raw": {
+      "assessment_id": "e2473b1d-a66d-4dfc-8364-5a66a8bb37d8",
+      "assessment": {
+        "patient_id": "P-08",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_eligible",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "72-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2015, managed with insulin"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "No other current medications reported."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-09",
+    "expected": "likely_excluded",
+    "record": "40-year-old patient. No diagnosis of diabetes on file. Current medications: Warfarin 5mg daily for atrial fibrillation.",
+    "actual": "likely_excluded",
+    "match": true,
+    "raw": {
+      "assessment_id": "37cc95ad-de69-43da-a221-630f9e681e06",
+      "assessment": {
+        "patient_id": "P-09",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_excluded",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "does_not_match",
+            "evidence": "40-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "does_not_match",
+            "evidence": "No diagnosis of diabetes on file"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "matches",
+            "evidence": "Current medications: Warfarin 5mg daily for atrial fibrillation."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-10",
+    "expected": "likely_eligible",
+    "record": "Patient is exactly 50 years old (DOB confirms). Type 2 Diabetes diagnosed 2021. Current medications: Metformin, Atorvastatin.",
+    "actual": "likely_eligible",
+    "match": true,
+    "raw": {
+      "assessment_id": "e19530d6-26b6-466a-a74a-54f9bb29e4b3",
+      "assessment": {
+        "patient_id": "P-10",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_eligible",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "Patient is exactly 50 years old (DOB confirms)"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2021"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "Current medications: Metformin, Atorvastatin."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-11",
+    "expected": "likely_excluded",
+    "record": "49-year-old patient. Type 2 Diabetes diagnosed 2020. No current medications reported.",
+    "actual": "likely_excluded",
+    "match": true,
+    "raw": {
+      "assessment_id": "b622c97b-55dd-4f7f-9bbd-116c5cfa38bc",
+      "assessment": {
+        "patient_id": "P-11",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_excluded",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "does_not_match",
+            "evidence": "49-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2020"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "No current medications reported."
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  },
+  {
+    "patient_id": "P-12",
+    "expected": "likely_eligible",
+    "record": "65-year-old patient. Type 2 Diabetes diagnosed 2016. Current medications: Aspirin 81mg daily, Lisinopril 10mg daily. Known allergy: penicillin.",
+    "actual": "likely_eligible",
+    "match": true,
+    "raw": {
+      "assessment_id": "f085a613-7bc3-488b-aeeb-ccc55896b28c",
+      "assessment": {
+        "patient_id": "P-12",
+        "trial_id": "TEST-BATCH-001",
+        "suggested_status": "likely_eligible",
+        "requires_coordinator_approval": true,
+        "rule_results": [
+          {
+            "rule_id": "INC-01",
+            "rule_text": "Patient must be 50 years of age or older",
+            "status": "matches",
+            "evidence": "65-year-old patient"
+          },
+          {
+            "rule_id": "INC-02",
+            "rule_text": "Patient must have a diagnosis of Type 2 Diabetes",
+            "status": "matches",
+            "evidence": "Type 2 Diabetes diagnosed 2016"
+          },
+          {
+            "rule_id": "EXC-01",
+            "rule_text": "Patient is currently taking Warfarin",
+            "status": "does_not_match",
+            "evidence": "Current medications: Aspirin 81mg daily, Lisinopril 10mg daily"
+          }
+        ]
+      },
+      "decision": null,
+      "decision_reason": null,
+      "provider_used": "anthropic",
+      "model_used": "claude-haiku-4-5-20251001"
+    }
+  }
+]

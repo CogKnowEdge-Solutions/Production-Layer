@@ -1,0 +1,30 @@
+# ---- Secrets ----
+# Never commit real environment files. Root .env holds live API keys.
+.env
+**/.env
+**/.env.*
+!**/.env.example
+
+# ---- Python ----
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ---- Local SQLite database (persisted in the container via a named volume) ----
+api/data/
+
+# ---- VS Code ----
+# Ignore .vscode folders generally, but keep api/.vscode/settings.json --
+# it fixes a Pylance false-positive on main.py's sibling import of
+# reasoning_engine via sys.path.
+.vscode/*
+!.vscode/settings.json
+
+# ---- Node / build output ----
+node_modules/
+.output/
+dist/
+dist-ssr/
+.nitro/
+*.local
+

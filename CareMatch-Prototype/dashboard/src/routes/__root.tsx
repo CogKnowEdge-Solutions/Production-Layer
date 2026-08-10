@@ -128,6 +128,7 @@ const NAV = [
   { to: "/review", label: "Assessment Review" },
   { to: "/trial-setup", label: "Trial Setup" },
   { to: "/trials", label: "Trials" },
+  { to: "/history", label: "History" },
 ] as const;
 
 function RootComponent() {

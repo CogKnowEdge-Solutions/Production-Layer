@@ -43,7 +43,7 @@ sys.path.insert(0, str(REASONING_ENGINE_PATH))
 
 from engine import assess_patient  # noqa: E402
 from protocol import Protocol, Rule  # noqa: E402
-from schema import AssessmentResult, RuleResult, RULE_ID_PATTERN  # noqa: E402
+from schema import AssessmentResult, RuleResult, RULE_ID_PATTERN, SuggestedStatus  # noqa: E402
 import llm_client  # noqa: E402
 
 app = FastAPI(title="CareMatch API", description="Phase 2 -- the doorway into the reasoning engine")
@@ -199,6 +199,23 @@ class AssessmentRecord(BaseModel):
     model_used: str
 
 
+class AssessmentSummary(BaseModel):
+    """
+    Lightweight one-row summary of an assessment for the History list --
+    deliberately WITHOUT the full nested rule_results (that's still what
+    GET /assessments/{id} is for). decision/decision_reason use the same
+    tolerant str | None as AssessmentRecord so legacy "approved" /
+    "overridden" rows display without crashing.
+    """
+    assessment_id: str
+    trial_id: str
+    patient_id: str
+    suggested_status: SuggestedStatus
+    decision: str | None = None
+    decision_reason: str | None = None
+    created_at: str
+
+
 class DecisionRequest(BaseModel):
     # Strict on purpose: coordinators can only write these 3 values. Old
     # "approved"/"overridden" data stays readable (see AssessmentRecord
@@ -338,6 +355,14 @@ def assess(body: AssessRequest):
         rule_results=[rr.model_dump() for rr in result.rule_results],
     )
     return record
+
+
+@app.get("/assessments", response_model=list[AssessmentSummary])
+def list_assessments():
+    """Every assessment ever run, newest first, one lightweight row each
+    (no rule_results -- those stay on the per-id endpoint). This is the
+    history view: you don't need an exact id to see what's been done."""
+    return db.list_assessments()
 
 
 @app.get("/assessments/{assessment_id}", response_model=AssessmentRecord)

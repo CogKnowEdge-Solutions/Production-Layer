@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ReviewRouteImport } from './routes/review'
 import { Route as TrialSetupRouteImport } from './routes/trial-setup'
 import { Route as TrialsRouteImport } from './routes/trials'
@@ -17,6 +18,11 @@ import { Route as TrialsRouteImport } from './routes/trials'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReviewRoute = ReviewRouteImport.update({
@@ -37,12 +43,14 @@ const TrialsRoute = TrialsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
   '/review': typeof ReviewRoute
   '/trial-setup': typeof TrialSetupRoute
   '/trials': typeof TrialsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
   '/review': typeof ReviewRoute
   '/trial-setup': typeof TrialSetupRoute
   '/trials': typeof TrialsRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
   '/review': typeof ReviewRoute
   '/trial-setup': typeof TrialSetupRoute
   '/trials': typeof TrialsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/review' | '/trial-setup' | '/trials'
+  fullPaths: '/' | '/history' | '/review' | '/trial-setup' | '/trials'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/review' | '/trial-setup' | '/trials'
-  id: '__root__' | '/' | '/review' | '/trial-setup' | '/trials'
+  to: '/' | '/history' | '/review' | '/trial-setup' | '/trials'
+  id: '__root__' | '/' | '/history' | '/review' | '/trial-setup' | '/trials'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HistoryRoute: typeof HistoryRoute
   ReviewRoute: typeof ReviewRoute
   TrialSetupRoute: typeof TrialSetupRoute
   TrialsRoute: typeof TrialsRoute
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/review': {
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HistoryRoute: HistoryRoute,
   ReviewRoute: ReviewRoute,
   TrialSetupRoute: TrialSetupRoute,
   TrialsRoute: TrialsRoute,

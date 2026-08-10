@@ -48,6 +48,16 @@ LANGSMITH_TRACING=true
 ```
 This step is entirely optional — the app works completely fine without it.
 
+**One important gotcha if you use a "Service" key:** LangSmith has two kinds of API keys, and they behave differently:
+- **Personal keys** start with `lsv2_pt_` — these work with just the `LANGSMITH_API_KEY` line above. Nothing more needed.
+- **Service (org) keys** start with `lsv2_sk_` — these are scoped to a specific workspace, and **without an explicit workspace ID LangSmith rejects every request with a confusing `403 Forbidden` error**. If your key starts with `lsv2_sk_`, you must also find your workspace ID and add it.
+
+**How to find your workspace ID (only if your key is a Service key):** in LangSmith, go to **Settings**, then look at the **API Keys** page. Your workspace ID is shown in the LangSmith settings/workspace area (it's a short identifier like `carematch-prototype`). Then add a line to the same `.env` file:
+```
+LANGSMITH_WORKSPACE_ID=your-own-workspace-id-here
+```
+That one extra line is what fixes the `403 Forbidden` — without it, a Service key simply won't work, and the error message LangSmith gives you doesn't say why.
+
 **Nothing here is required just to start the app** — but for any real use or demo, `LLM_MODE=real` with a valid key is the expected configuration. Without a key, assessments fail loudly with an error rather than silently returning placeholder answers; the app never fakes a result by accident. The free developer testing mode is reserved for running the automated test suite, not for demos.
 
 ---
@@ -123,7 +133,7 @@ In your web browser, go to:
 
 **`http://localhost:8080`**
 
-This is the actual app — the screen a hospital coordinator would use. You should see a page called "New Assessment." Across the top is a navigation bar with four tabs: **New Assessment**, **Assessment Review**, **Trial Setup**, and **Trials** (which lists every registered trial and its rules). This address is the same either way, Docker or manual.
+This is the actual app — the screen a hospital coordinator would use. You should see a page called "New Assessment." Across the top is a navigation bar with five tabs: **New Assessment**, **Assessment Review**, **Trial Setup**, **Trials** (which lists every registered trial and its rules), and **History** (which lists every assessment ever run, newest first). This address is the same either way, Docker or manual.
 
 ---
 

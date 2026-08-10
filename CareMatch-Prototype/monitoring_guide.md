@@ -14,13 +14,22 @@ There are two other ways to look at what the app did, and it helps to know which
 - **LangSmith** (only if you turned tracing on): *"Why did the AI decide what it decided?"* — it stores the actual reasoning behind every rule.
 - **Prometheus**: *"How is the whole system doing over time?"* — the big-picture health numbers.
 
-You don't have to start Prometheus or do anything to make it record. It starts itself when you run `docker compose up -d --build`, and it checks on the app automatically every 15 seconds.
+You don't have to start Prometheus or do anything to make it record. It starts itself when you run the command below, and it checks on the app automatically every 15 seconds:
+
+```
+docker compose up -d --build
+```
 
 ---
 
 ## Looking at Prometheus Yourself
 
-1. Make sure the app is running (`docker compose up -d --build`).
+1. Make sure the app is running (click to copy):
+
+   ```
+   docker compose up -d --build
+   ```
+
 2. Open **http://localhost:9090** in your browser.
 3. Click **Status** in the menu at the top, then **Targets**.
 
@@ -37,14 +46,31 @@ A healthy screen shows both rows with a green circle and the word **UP**. If a r
 
 ## Running a Query in Prometheus
 
-The main page of Prometheus (**http://localhost:9090**) has a box at the top where you can type questions. Type one of these, then click **Execute** (or press Enter):
+The main page of Prometheus (**http://localhost:9090**) has a box at the top where you can type questions. Type one of these (click to copy), then click **Execute** (or press Enter):
 
-| Query | What it shows |
-|---|---|
-| `assessments_total` | The total number of eligibility checks that have ever run. |
-| `rate(assessments_total[5m])` | The average number of checks per second over the last 5 minutes — the "is anyone using the app right now?" number. |
-| `trials_registered_total` | How many trials have been set up on the Trial Setup page. |
-| `coordinator_decisions_total` | How many coordinator decisions have been recorded (Accept, Deny, or Needs More Review). |
+```
+assessments_total
+```
+
+The total number of eligibility checks that have ever run.
+
+```
+rate(assessments_total[5m])
+```
+
+The average number of checks per second over the last 5 minutes — the "is anyone using the app right now?" number.
+
+```
+trials_registered_total
+```
+
+How many trials have been set up on the Trial Setup page.
+
+```
+coordinator_decisions_total
+```
+
+How many coordinator decisions have been recorded (Accept, Deny, or Needs More Review).
 
 **Why a brand-new install shows mostly zeros:** these are counting numbers. They start at zero and only go up as the app actually gets used. If you installed the app two minutes ago and haven't clicked anything yet, there's nothing to have counted — so you'll see `0`, or no result at all for `rate(...)`. A rate of change needs something to have changed. That is normal, not a fault. (See the troubleshooting note at the end.)
 
@@ -79,7 +105,12 @@ Grafana needs to be told where Prometheus is. This is the one slightly technical
 
 1. In Grafana, on the menu on the left, go to **Connections → Data sources**.
 2. Click **Add data source**, then choose **Prometheus**.
-3. Find the **URL** box and type exactly: `http://prometheus:9090`
+3. Find the **URL** box and type exactly (click to copy):
+
+   ```
+   http://prometheus:9090
+   ```
+
    - **Why not `localhost`?** Grafana and Prometheus each run in their own box (a "container") inside Docker. To each of them, "localhost" means *their own* box — not yours, and not each other's. Inside Docker's own private network, Grafana reaches Prometheus by its service name: **`prometheus`**. If you typed `http://localhost:9090`, Grafana would search inside its own container, find nothing, and the connection would fail. Your browser uses `localhost` because your browser is *not* inside Docker — different world, different address.
 4. Click **Save & test** at the bottom. You should see a green **"Successfully queried the Prometheus API"** message.
 
@@ -87,7 +118,12 @@ That's the whole connection. Now let's make one simple chart:
 
 5. On the menu on the left, go to **Dashboards → New dashboard**, then click **Add visualization**.
 6. It will ask which data source to use — pick **Prometheus**.
-7. In the query box near the top, type: `rate(assessments_total[5m])`
+7. In the query box near the top, type (click to copy):
+
+   ```
+   rate(assessments_total[5m])
+   ```
+
 8. Click **Run queries**. You'll likely see an empty graph for now — that's fine. It means no assessments have run yet (see the end of this guide).
 9. Click **Apply** (top right), then **Save dashboard**, give it a name like "CareMatch health", and click **Save** again.
 
@@ -101,7 +137,13 @@ You can add more panels the same way, using any of the other queries from the Pr
 
 Grafana's saved dashboards and Prometheus's recorded history are stored in **named volumes** (`grafana_data` and `prometheus_data`) — special storage that survives `docker compose down`. So once you've connected Prometheus and saved a dashboard, it stays: restart the app, shut it down overnight, even rebuild it, and your charts and history are still there next time. You do this setup once, not every day.
 
-One catch: run `docker compose down` with **no extra flags**. If you run `docker compose down -v`, the `-v` means "delete the storage too" — that wipes the dashboards and history, and you'd have to do this whole setup again. Don't add `-v` unless you want to start over on purpose.
+One catch: run `docker compose down` with **no extra flags** (click to copy):
+
+```
+docker compose down
+```
+
+If you run `docker compose down -v`, the `-v` means "delete the storage too" — that wipes the dashboards and history, and you'd have to do this whole setup again. Don't add `-v` unless you want to start over on purpose.
 
 ---
 

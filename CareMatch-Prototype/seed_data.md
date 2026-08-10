@@ -12,18 +12,61 @@ The five patients below are a quick manual walkthrough for confirming the app wo
 
 Enter this trial:
 
-| Field | Value |
-|---|---|
-| Trial name | `Type 2 Diabetes Medication Trial` |
-| Trial ID | `DEMO-TRIAL-001` |
+**Trial name:**
 
-Add these 3 rules (click "Add criterion" for the 2nd and 3rd):
+```
+Type 2 Diabetes Medication Trial
+```
 
-| Rule ID | Rule Text | Type |
-|---|---|---|
-| `INC-01` | `Patient must be 50 years of age or older` | Inclusion |
-| `INC-02` | `Patient must have a diagnosis of Type 2 Diabetes` | Inclusion |
-| `EXC-01` | `Patient is currently taking Warfarin` | Exclusion |
+**Trial ID:**
+
+```
+DEMO-TRIAL-001
+```
+
+Add these 3 rules (click "Add criterion" for the 2nd and 3rd). For each rule, type in the Rule ID and Rule Text, and pick the type from the dropdown — the type isn't typed or pasted, you just select it:
+
+**Rule 1**
+
+Rule ID:
+```
+INC-01
+```
+
+Rule Text:
+```
+Patient must be 50 years of age or older
+```
+
+Type: **Inclusion** — select it in the dropdown.
+
+**Rule 2**
+
+Rule ID:
+```
+INC-02
+```
+
+Rule Text:
+```
+Patient must have a diagnosis of Type 2 Diabetes
+```
+
+Type: **Inclusion** — select it in the dropdown.
+
+**Rule 3**
+
+Rule ID:
+```
+EXC-01
+```
+
+Rule Text:
+```
+Patient is currently taking Warfarin
+```
+
+Type: **Exclusion** — select it in the dropdown.
 
 **Important note on rule wording:** notice `EXC-01` is written as a plain statement ("Patient **is** currently taking Warfarin"), not as a negative requirement ("Patient must **not** be taking Warfarin"). Testing during this project found that the second style confuses the AI's reasoning. Always write exclusion rules the first way.
 
@@ -36,40 +79,72 @@ Click **Save trial**.
 For each one, select the trial you just created, enter the Patient ID and record text exactly as shown, and check whether the result matches what's expected.
 
 ### Patient 1 — Should Come Back "Likely Eligible"
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1001` |
-| Patient record | `62-year-old patient. Diagnosed with Type 2 Diabetes in 2019. Current medications: Metformin 500mg twice daily.` |
+
+Patient ID to type in:
+
+```
+PT-1001
+```
+
+Patient record text to paste in:
+
+```
+62-year-old patient. Diagnosed with Type 2 Diabetes in 2019. Current medications: Metformin 500mg twice daily.
+```
 
 **Why:** meets both age and diagnosis rules, and isn't on Warfarin.
 
 ---
 
 ### Patient 2 — Should Come Back "Likely Excluded" (Age)
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1002` |
-| Patient record | `35-year-old patient. Type 2 Diabetes diagnosed 2022. No current medications reported.` |
+
+Patient ID to type in:
+
+```
+PT-1002
+```
+
+Patient record text to paste in:
+
+```
+35-year-old patient. Type 2 Diabetes diagnosed 2022. No current medications reported.
+```
 
 **Why:** too young — fails the age rule, even though the diabetes diagnosis is fine.
 
 ---
 
 ### Patient 3 — Should Come Back "Likely Excluded" (Medication)
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1003` |
-| Patient record | `55-year-old patient. Type 2 Diabetes diagnosed 2020. Current medications: Warfarin 5mg daily, Metformin 500mg twice daily.` |
+
+Patient ID to type in:
+
+```
+PT-1003
+```
+
+Patient record text to paste in:
+
+```
+55-year-old patient. Type 2 Diabetes diagnosed 2020. Current medications: Warfarin 5mg daily, Metformin 500mg twice daily.
+```
 
 **Why:** meets age and diagnosis, but is on Warfarin — the one thing that disqualifies a patient.
 
 ---
 
 ### Patient 4 — Should Come Back "Needs More Information"
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1004` |
-| Patient record | `Patient presenting for diabetes management follow-up. Type 2 Diabetes diagnosed 2019. Current medications: Metformin. Date of birth not recorded in this note.` |
+
+Patient ID to type in:
+
+```
+PT-1004
+```
+
+Patient record text to paste in:
+
+```
+Patient presenting for diabetes management follow-up. Type 2 Diabetes diagnosed 2019. Current medications: Metformin. Date of birth not recorded in this note.
+```
 
 **Why:** the record never actually states the patient's age — the AI should say "unclear" rather than guess, since guessing wrong here could wrongly exclude someone.
 
@@ -78,12 +153,37 @@ For each one, select the trial you just created, enter the Patient ID and record
 ---
 
 ### Patient 5 — Should Come Back "Likely Eligible" (Boundary Case)
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1005` |
-| Patient record | `Patient is exactly 50 years old (DOB confirms). Type 2 Diabetes diagnosed 2021. Current medications: Metformin, Atorvastatin.` |
+
+Patient ID to type in:
+
+```
+PT-1005
+```
+
+Patient record text to paste in:
+
+```
+Patient is exactly 50 years old (DOB confirms). Type 2 Diabetes diagnosed 2021. Current medications: Metformin, Atorvastatin.
+```
 
 **Why:** the rule says "50 or older" — exactly 50 should count as eligible, not excluded. This checks the AI handles the boundary correctly, not just clearly-above or clearly-below cases.
+
+---
+
+## Step 3 — Check Your Work
+
+Now that all 5 patients have been assessed, confirm the app has actually stored everything by looking at two pages:
+
+**1. The Trials page** (in the top navigation, click **Trials**)
+- Confirm **`Type 2 Diabetes Medication Trial`** appears, with its 3 rules: `INC-01` (50 or older), `INC-02` (Type 2 Diabetes diagnosis), and `EXC-01` (currently taking Warfarin).
+- Click the trial name to expand it if the rules aren't visible.
+
+**2. The History page** (in the top navigation, click **History**)
+- Confirm all **5 assessments** appear — one per patient (`PT-1001` through `PT-1005`), listed newest first.
+- Each row should show the **AI suggestion** you saw when you ran it: likely eligible for `PT-1001` and `PT-1005`, likely excluded for `PT-1002` and `PT-1003`, and needs more information for `PT-1004`.
+- Every row's **Decision** column should read **Undecided** — none of these assessments were given a coordinator decision in this walkthrough, and that's expected. Clicking a patient row opens the full evidence in the Assessment Review page.
+
+If anything on either page is missing or different from above, that's worth investigating — the app stores everything permanently, so what you ran should be right there.
 
 ---
 

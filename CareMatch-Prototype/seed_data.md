@@ -181,7 +181,7 @@ Now that all 5 patients have been assessed, confirm the app has actually stored 
 **2. The Assessment History page** (in the top navigation, click **Assessment History**)
 - Confirm all **5 assessments** appear — one per patient (`PT-1001` through `PT-1005`), listed newest first.
 - Each row should show the **AI suggestion** you saw when you ran it: likely eligible for `PT-1001` and `PT-1005`, likely excluded for `PT-1002` and `PT-1003`, and needs more information for `PT-1004`.
-- Every row's **Decision** column should read **Undecided** — none of these assessments were given a coordinator decision in this walkthrough, and that's expected. Clicking a patient row opens the full evidence in the Assessment Review page.
+- Every row's **Decision** column should read **Undecided** — none of these assessments were given a coordinator decision in this walkthrough, and that's expected. Clicking any row opens the full evidence in the Assessment Review page.
 
 If anything on either page is missing or different from above, that's worth investigating — the app stores everything permanently, so what you ran should be right there.
 

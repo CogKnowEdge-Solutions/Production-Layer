@@ -1,17 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { decisionDisplayLabel, listAssessments, SUGGESTED_STATUS_LABEL } from "@/lib/api";
 
 export const Route = createFileRoute("/history")({
   head: () => ({
     meta: [
-      { title: "History — Every Assessment | CareMatch" },
+      { title: "Assessment History — Every Assessment | CareMatch" },
       {
         name: "description",
         content:
           "Every eligibility assessment CareMatch has ever run, newest first, with each AI suggestion and the coordinator's decision.",
       },
-      { property: "og:title", content: "History — CareMatch" },
+      { property: "og:title", content: "Assessment History — CareMatch" },
       {
         property: "og:description",
         content: "Browse every assessment run in CareMatch and its decision state.",
@@ -29,6 +29,7 @@ function decisionTone(decision: string | null): string {
 }
 
 function History() {
+  const navigate = useNavigate();
   const assessmentsQuery = useQuery({
     queryKey: ["assessments"],
     queryFn: listAssessments,
@@ -36,10 +37,10 @@ function History() {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-12">
-      <h1 className="text-3xl">History</h1>
+      <h1 className="text-3xl">Assessment History</h1>
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-        Every assessment CareMatch has ever run, newest first. Click any row to open the full
-        evidence and decision in the Review page.
+        Every assessment CareMatch has ever run, newest first. Click any row to open that
+        assessment's full evidence and decision in the Assessment Review page.
       </p>
 
       {assessmentsQuery.isLoading && (
@@ -79,11 +80,22 @@ function History() {
             </thead>
             <tbody>
               {assessmentsQuery.data.map((a) => (
-                <tr key={a.assessment_id}>
+                <tr
+                  key={a.assessment_id}
+                  onClick={() => navigate({ to: "/review", search: { id: a.assessment_id } })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      navigate({ to: "/review", search: { id: a.assessment_id } });
+                    }
+                  }}
+                  tabIndex={0}
+                  className="cursor-pointer transition-colors hover:bg-secondary/40 focus-visible:bg-secondary/40 focus-visible:outline-none"
+                >
                   <td className="border-t border-border/60 px-5 py-4 font-mono text-sm text-structure">
                     <Link
                       to="/review"
                       search={{ id: a.assessment_id }}
+                      onClick={(e) => e.stopPropagation()}
                       className="block text-structure transition-colors hover:text-primary"
                     >
                       {a.patient_id}

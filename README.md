@@ -8,10 +8,10 @@ This repository aggregates the production-layer agentic projects: production-gra
 
 This repository aggregates several sub-projects using `git subtree`. Each sub-project lives in its own folder and retains its full git history:
 
-| Folder | Source repository |
-| --- | --- |
-| `CareMatch-Prototype/` | https://github.com/CogKnowEdge-Solutions/CareMatch-Prototype.git |
-| `CareMatch-SDD/` | https://github.com/CogKnowEdge-Solutions/CareMatch.git |
+| Folder |
+| --- |
+| `CareMatch-Prototype/` |
+| `CareMatch-SDD/` |
 
 ## Working with sub-repositories
 

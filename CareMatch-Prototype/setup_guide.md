@@ -133,7 +133,7 @@ In your web browser, go to:
 
 **`http://localhost:8080`**
 
-This is the actual app — the screen a hospital coordinator would use. You should see a page called "New Assessment." Across the top is a navigation bar with five tabs: **New Assessment**, **Assessment Review**, **Trial Setup**, **Trials** (which lists every registered trial and its rules), and **History** (which lists every assessment ever run, newest first). This address is the same either way, Docker or manual.
+This is the actual app — the screen a hospital coordinator would use. You should see a page called "New Assessment." Across the top is a navigation bar with five tabs: **New Assessment**, **Assessment Review**, **Trial Setup**, **Trials** (which lists every registered trial and its rules), and **Assessment History** (which lists every assessment ever run, newest first, and opens any one of them with a click). This address is the same either way, Docker or manual.
 
 ---
 

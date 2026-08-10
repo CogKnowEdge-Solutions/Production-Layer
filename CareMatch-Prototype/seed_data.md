@@ -178,7 +178,7 @@ Now that all 5 patients have been assessed, confirm the app has actually stored 
 - Confirm **`Type 2 Diabetes Medication Trial`** appears, with its 3 rules: `INC-01` (50 or older), `INC-02` (Type 2 Diabetes diagnosis), and `EXC-01` (currently taking Warfarin).
 - Click the trial name to expand it if the rules aren't visible.
 
-**2. The History page** (in the top navigation, click **History**)
+**2. The Assessment History page** (in the top navigation, click **Assessment History**)
 - Confirm all **5 assessments** appear — one per patient (`PT-1001` through `PT-1005`), listed newest first.
 - Each row should show the **AI suggestion** you saw when you ran it: likely eligible for `PT-1001` and `PT-1005`, likely excluded for `PT-1002` and `PT-1003`, and needs more information for `PT-1004`.
 - Every row's **Decision** column should read **Undecided** — none of these assessments were given a coordinator decision in this walkthrough, and that's expected. Clicking a patient row opens the full evidence in the Assessment Review page.

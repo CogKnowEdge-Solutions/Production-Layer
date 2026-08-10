@@ -8,6 +8,7 @@
 
 ## Table of Contents
 
+- [Setup — Get It Running](#setup--get-it-running)
 - [Documentation Map](#documentation-map)
 - [What This Project Does](#what-this-project-does)
 - [Why It's Built This Way](#why-its-built-this-way)
@@ -50,6 +51,38 @@ Everything worth reading, and what to read it for. This file (`README.md`) is th
 | `dashboard/src/routes/README.md` | Internal note on how the dashboard's file-based routing works. |
 
 The suggested path for a newcomer is simple: `setup_guide.md` → `seed_data.md` → `monitoring_guide.md` → `project_summary.md`.
+
+---
+
+## Setup — Get It Running
+
+### 1. Clone (this folder only)
+
+CareMatch-Prototype lives in the `Production-Layer` monorepo. To fetch only
+this folder without the rest of the repo, use a sparse checkout:
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/CogKnowEdge-Solutions/Production-Layer.git
+cd Production-Layer
+git sparse-checkout set CareMatch-Prototype
+cd CareMatch-Prototype
+```
+
+### 2. Environment setup
+
+The only machine requirement is **Docker Desktop** (download from
+[docker.com](https://www.docker.com/products/docker-desktop/), install it, and
+leave it running in the background). Then copy the environment template and
+add your AI API key:
+
+```bash
+cp .env.example .env      # then set LLM_MODE=real and ANTHROPIC_API_KEY
+```
+
+### 3. Next steps
+
+From here, follow **`setup_guide.md`** step by step — it covers starting
+everything, verifying it works, trying it out, and troubleshooting.
 
 ---
 

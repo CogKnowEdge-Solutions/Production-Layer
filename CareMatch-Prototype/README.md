@@ -81,8 +81,9 @@ cp .env.example .env      # then set LLM_MODE=real and ANTHROPIC_API_KEY
 
 ### 3. Next steps
 
-From here, follow **`setup_guide.md`** step by step — it covers starting
-everything, verifying it works, trying it out, and troubleshooting.
+From here, follow **[setup_guide.md](./setup_guide.md)** step by step — it
+covers starting everything, verifying it works, trying it out, and
+troubleshooting.
 
 ---
 

@@ -12,18 +12,61 @@ The five patients below are a quick manual walkthrough for confirming the app wo
 
 Enter this trial:
 
-| Field | Value |
-|---|---|
-| Trial name | `Type 2 Diabetes Medication Trial` |
-| Trial ID | `DEMO-TRIAL-001` |
+**Trial name:**
 
-Add these 3 rules (click "Add criterion" for the 2nd and 3rd):
+```
+Type 2 Diabetes Medication Trial
+```
 
-| Rule ID | Rule Text | Type |
-|---|---|---|
-| `INC-01` | `Patient must be 50 years of age or older` | Inclusion |
-| `INC-02` | `Patient must have a diagnosis of Type 2 Diabetes` | Inclusion |
-| `EXC-01` | `Patient is currently taking Warfarin` | Exclusion |
+**Trial ID:**
+
+```
+DEMO-TRIAL-001
+```
+
+Add these 3 rules (click "Add criterion" for the 2nd and 3rd). For each rule, type in the Rule ID and Rule Text, and pick the type from the dropdown — the type isn't typed or pasted, you just select it:
+
+**Rule 1**
+
+Rule ID:
+```
+INC-01
+```
+
+Rule Text:
+```
+Patient must be 50 years of age or older
+```
+
+Type: **Inclusion** — select it in the dropdown.
+
+**Rule 2**
+
+Rule ID:
+```
+INC-02
+```
+
+Rule Text:
+```
+Patient must have a diagnosis of Type 2 Diabetes
+```
+
+Type: **Inclusion** — select it in the dropdown.
+
+**Rule 3**
+
+Rule ID:
+```
+EXC-01
+```
+
+Rule Text:
+```
+Patient is currently taking Warfarin
+```
+
+Type: **Exclusion** — select it in the dropdown.
 
 **Important note on rule wording:** notice `EXC-01` is written as a plain statement ("Patient **is** currently taking Warfarin"), not as a negative requirement ("Patient must **not** be taking Warfarin"). Testing during this project found that the second style confuses the AI's reasoning. Always write exclusion rules the first way.
 
@@ -36,9 +79,12 @@ Click **Save trial**.
 For each one, select the trial you just created, enter the Patient ID and record text exactly as shown, and check whether the result matches what's expected.
 
 ### Patient 1 — Should Come Back "Likely Eligible"
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1001` |
+
+Patient ID to type in:
+
+```
+PT-1001
+```
 
 Patient record text to paste in:
 
@@ -51,9 +97,12 @@ Patient record text to paste in:
 ---
 
 ### Patient 2 — Should Come Back "Likely Excluded" (Age)
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1002` |
+
+Patient ID to type in:
+
+```
+PT-1002
+```
 
 Patient record text to paste in:
 
@@ -66,9 +115,12 @@ Patient record text to paste in:
 ---
 
 ### Patient 3 — Should Come Back "Likely Excluded" (Medication)
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1003` |
+
+Patient ID to type in:
+
+```
+PT-1003
+```
 
 Patient record text to paste in:
 
@@ -81,9 +133,12 @@ Patient record text to paste in:
 ---
 
 ### Patient 4 — Should Come Back "Needs More Information"
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1004` |
+
+Patient ID to type in:
+
+```
+PT-1004
+```
 
 Patient record text to paste in:
 
@@ -98,9 +153,12 @@ Patient presenting for diabetes management follow-up. Type 2 Diabetes diagnosed 
 ---
 
 ### Patient 5 — Should Come Back "Likely Eligible" (Boundary Case)
-| Field | Value |
-|---|---|
-| Patient ID | `PT-1005` |
+
+Patient ID to type in:
+
+```
+PT-1005
+```
 
 Patient record text to paste in:
 

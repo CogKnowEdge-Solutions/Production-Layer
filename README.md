@@ -2,6 +2,8 @@
 
 A production-ready layer for deploying and operating AI applications.
 
+This repository aggregates the production-layer agentic projects: production-grade applications and prototypes built around agentic workflows, multi-service orchestration, observability, and deployment — everything needed to take agentic ideas from prototype to production.
+
 ## Repositories
 
 This repository aggregates several sub-projects using `git subtree`. Each sub-project lives in its own folder and retains its full git history:

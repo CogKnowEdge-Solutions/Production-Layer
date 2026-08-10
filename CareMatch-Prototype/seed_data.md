@@ -39,7 +39,12 @@ For each one, select the trial you just created, enter the Patient ID and record
 | Field | Value |
 |---|---|
 | Patient ID | `PT-1001` |
-| Patient record | `62-year-old patient. Diagnosed with Type 2 Diabetes in 2019. Current medications: Metformin 500mg twice daily.` |
+
+Patient record text to paste in:
+
+```
+62-year-old patient. Diagnosed with Type 2 Diabetes in 2019. Current medications: Metformin 500mg twice daily.
+```
 
 **Why:** meets both age and diagnosis rules, and isn't on Warfarin.
 
@@ -49,7 +54,12 @@ For each one, select the trial you just created, enter the Patient ID and record
 | Field | Value |
 |---|---|
 | Patient ID | `PT-1002` |
-| Patient record | `35-year-old patient. Type 2 Diabetes diagnosed 2022. No current medications reported.` |
+
+Patient record text to paste in:
+
+```
+35-year-old patient. Type 2 Diabetes diagnosed 2022. No current medications reported.
+```
 
 **Why:** too young — fails the age rule, even though the diabetes diagnosis is fine.
 
@@ -59,7 +69,12 @@ For each one, select the trial you just created, enter the Patient ID and record
 | Field | Value |
 |---|---|
 | Patient ID | `PT-1003` |
-| Patient record | `55-year-old patient. Type 2 Diabetes diagnosed 2020. Current medications: Warfarin 5mg daily, Metformin 500mg twice daily.` |
+
+Patient record text to paste in:
+
+```
+55-year-old patient. Type 2 Diabetes diagnosed 2020. Current medications: Warfarin 5mg daily, Metformin 500mg twice daily.
+```
 
 **Why:** meets age and diagnosis, but is on Warfarin — the one thing that disqualifies a patient.
 
@@ -69,7 +84,12 @@ For each one, select the trial you just created, enter the Patient ID and record
 | Field | Value |
 |---|---|
 | Patient ID | `PT-1004` |
-| Patient record | `Patient presenting for diabetes management follow-up. Type 2 Diabetes diagnosed 2019. Current medications: Metformin. Date of birth not recorded in this note.` |
+
+Patient record text to paste in:
+
+```
+Patient presenting for diabetes management follow-up. Type 2 Diabetes diagnosed 2019. Current medications: Metformin. Date of birth not recorded in this note.
+```
 
 **Why:** the record never actually states the patient's age — the AI should say "unclear" rather than guess, since guessing wrong here could wrongly exclude someone.
 
@@ -81,9 +101,31 @@ For each one, select the trial you just created, enter the Patient ID and record
 | Field | Value |
 |---|---|
 | Patient ID | `PT-1005` |
-| Patient record | `Patient is exactly 50 years old (DOB confirms). Type 2 Diabetes diagnosed 2021. Current medications: Metformin, Atorvastatin.` |
+
+Patient record text to paste in:
+
+```
+Patient is exactly 50 years old (DOB confirms). Type 2 Diabetes diagnosed 2021. Current medications: Metformin, Atorvastatin.
+```
 
 **Why:** the rule says "50 or older" — exactly 50 should count as eligible, not excluded. This checks the AI handles the boundary correctly, not just clearly-above or clearly-below cases.
+
+---
+
+## Step 3 — Check Your Work
+
+Now that all 5 patients have been assessed, confirm the app has actually stored everything by looking at two pages:
+
+**1. The Trials page** (in the top navigation, click **Trials**)
+- Confirm **`Type 2 Diabetes Medication Trial`** appears, with its 3 rules: `INC-01` (50 or older), `INC-02` (Type 2 Diabetes diagnosis), and `EXC-01` (currently taking Warfarin).
+- Click the trial name to expand it if the rules aren't visible.
+
+**2. The History page** (in the top navigation, click **History**)
+- Confirm all **5 assessments** appear — one per patient (`PT-1001` through `PT-1005`), listed newest first.
+- Each row should show the **AI suggestion** you saw when you ran it: likely eligible for `PT-1001` and `PT-1005`, likely excluded for `PT-1002` and `PT-1003`, and needs more information for `PT-1004`.
+- Every row's **Decision** column should read **Undecided** — none of these assessments were given a coordinator decision in this walkthrough, and that's expected. Clicking a patient row opens the full evidence in the Assessment Review page.
+
+If anything on either page is missing or different from above, that's worth investigating — the app stores everything permanently, so what you ran should be right there.
 
 ---
 

@@ -39,12 +39,21 @@ A healthy screen shows both rows with a green circle and the word **UP**. If a r
 
 The main page of Prometheus (**http://localhost:9090**) has a box at the top where you can type questions. Type one of these, then click **Execute** (or press Enter):
 
-| Query | What it shows |
-|---|---|
-| `assessments_total` | The total number of eligibility checks that have ever run. |
-| `rate(assessments_total[5m])` | The average number of checks per second over the last 5 minutes — the "is anyone using the app right now?" number. |
-| `trials_registered_total` | How many trials have been set up on the Trial Setup page. |
-| `coordinator_decisions_total` | How many coordinator decisions have been recorded (Accept, Deny, or Needs More Review). |
+`assessments_total`
+
+The total number of eligibility checks that have ever run.
+
+`rate(assessments_total[5m])`
+
+The average number of checks per second over the last 5 minutes — the "is anyone using the app right now?" number.
+
+`trials_registered_total`
+
+How many trials have been set up on the Trial Setup page.
+
+`coordinator_decisions_total`
+
+How many coordinator decisions have been recorded (Accept, Deny, or Needs More Review).
 
 **Why a brand-new install shows mostly zeros:** these are counting numbers. They start at zero and only go up as the app actually gets used. If you installed the app two minutes ago and haven't clicked anything yet, there's nothing to have counted — so you'll see `0`, or no result at all for `rate(...)`. A rate of change needs something to have changed. That is normal, not a fault. (See the troubleshooting note at the end.)
 
@@ -87,7 +96,10 @@ That's the whole connection. Now let's make one simple chart:
 
 5. On the menu on the left, go to **Dashboards → New dashboard**, then click **Add visualization**.
 6. It will ask which data source to use — pick **Prometheus**.
-7. In the query box near the top, type: `rate(assessments_total[5m])`
+7. In the query box near the top, type:
+
+   `rate(assessments_total[5m])`
+
 8. Click **Run queries**. You'll likely see an empty graph for now — that's fine. It means no assessments have run yet (see the end of this guide).
 9. Click **Apply** (top right), then **Save dashboard**, give it a name like "CareMatch health", and click **Save** again.
 

@@ -1,19 +1,45 @@
 # Production-Layer
 
-A production-ready layer for deploying and operating AI applications.
+A production-ready layer for deploying and operating AI applications. This repository aggregates production-grade agentic projects — covering agentic workflows, multi-service orchestration, observability, and deployment — to take agentic ideas from prototype to production.
 
-This repository aggregates the production-layer agentic projects: production-grade applications and prototypes built around agentic workflows, multi-service orchestration, observability, and deployment — everything needed to take agentic ideas from prototype to production.
+## Table of Contents
 
-## Repositories
+- [Features](#features)
+- [Repository Structure](#repository-structure)
+- [Getting Started](#getting-started)
+- [Working with Sub-Repositories](#working-with-sub-repositories)
+- [Contributing](#contributing)
+- [License](#license)
 
-This repository aggregates several sub-projects using `git subtree`. Each sub-project lives in its own folder and retains its full git history:
+## Features
 
-| Folder |
-| --- |
-| `CareMatch-Prototype/` |
-| `CareMatch-SDD/` |
+- **Agentic workflows** — production-grade agent orchestration and tool-calling.
+- **Multi-service orchestration** — Docker Compose / Kubernetes-ready services.
+- **Observability** — Prometheus + Grafana monitoring, logging, and tracing.
+- **Deployment** — containerized, cloud-ready application layers.
 
-## Working with sub-repositories
+## Repository Structure
+
+This repository aggregates sub-projects using `git subtree`. Each sub-project lives in its own folder and retains its full git history.
+
+```
+Production-Layer/
+├── CareMatch-Prototype/   # Prototype application
+└── CareMatch-SDD/         # Spec-driven development implementation
+```
+
+## Getting Started
+
+Clone this repository and navigate into the sub-project you want to run:
+
+```bash
+git clone https://github.com/<org>/Production-Layer.git
+cd Production-Layer
+```
+
+Each sub-project contains its own README with setup, configuration, and usage instructions.
+
+## Working with Sub-Repositories
 
 ### Add a sub-repository
 
@@ -27,7 +53,7 @@ git subtree add --prefix=<Folder-Name> https://github.com/<org>/<repo>.git <bran
 git subtree pull --prefix=<Folder-Name> https://github.com/<org>/<repo>.git <branch>
 ```
 
-### Fetch a sub-repository back out into its own standalone repo
+### Extract a sub-repository into its own standalone repo
 
 ```bash
 # Extract the folder's history into a temporary branch
@@ -42,7 +68,15 @@ git checkout FETCH_HEAD
 git push origin master
 ```
 
-This preserves the complete commit history of that sub-project.
+This preserves the complete commit history of the sub-project.
+
+## Contributing
+
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/your-feature`).
+3. Commit your changes (`git commit -m "Add your feature"`).
+4. Push to the branch (`git push origin feature/your-feature`).
+5. Open a pull request.
 
 ## License
 

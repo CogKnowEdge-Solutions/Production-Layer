@@ -1,0 +1,85 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - DATABASE_URL=postgresql+psycopg://carematch:carematch@postgres:5432/carematch
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    ports:
+      - "8100:8100"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-openai/gpt-oss-20b:free}
+      - AGENT_API_URL=http://api:8000
+    depends_on:
+      - api
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://localhost:8000
+      - AGENT_URL=http://localhost:8100
+    depends_on:
+      - api
+      - agent
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=carematch
+      - POSTGRES_PASSWORD=carematch
+      - POSTGRES_DB=carematch
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana:/var/lib/grafana/provisioning/dashboards:ro
+
+volumes:
+  pgdata:

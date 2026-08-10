@@ -1,0 +1,365 @@
+# CareMatch
+
+Clinical trial patient eligibility screening with explainable, evidence-backed AI
+recommendations and human-in-the-loop review. FHIR R4 patient data is evaluated
+against trial protocols using a rules engine; every recommendation is traceable
+to evidence, and coordinators can override with mandatory reasoning.
+
+Built with **FastAPI**, **SQLAlchemy**, and OAuth 2.0-style JWT auth with
+role-based access control (RBAC). Ships with three clients on top of the REST
+API:
+
+- a **Streamlit web UI** for day-to-day operation,
+- an **AI agent team** (LangChain coordinator + specialist subagents on
+  OpenRouter) that operates the whole system in plain language, and
+- a **Prometheus + Grafana** observability stack.
+
+## System architecture
+
+```mermaid
+flowchart LR
+    User["Clinician / Coordinator"]
+    UI["Streamlit Web UI<br/><b>:8501</b> frontend/app.py"]
+    AG["AI Agent Team<br/><b>:8100</b> agent/main.py"]
+    API["FastAPI API<br/><b>:8000</b> app/main.py"]
+    PG[("PostgreSQL<br/>postgres:5432")]
+    RD[("Redis cache<br/>redis:6379")]
+    PROM["Prometheus<br/>:9090"]
+    GRAF["Grafana<br/>:3000"]
+    OR["OpenRouter<br/>(free LLM models)"]
+
+    User --> UI
+    User --> AG
+    UI -->|"REST /api/v1 (JWT)"| API
+    AG -->|"REST /api/v1 (JWT)"| API
+    UI -->|"POST /agent/chat"| AG
+    AG -->|"LLM tool-calling"| OR
+    API --> PG
+    API --> RD
+    API -->|"/metrics"| PROM
+    PROM --> GRAF
+    AG --> API
+```
+
+## Repository layout
+
+```mermaid
+flowchart TD
+    subgraph API["<b>app/</b> — FastAPI service"]
+        direction TB
+        R["api/v1/<br/>auth · patients · trials · caregivers<br/>assessments · audit · metrics"]
+        S["services/<br/>fhir_processor · rules_engine<br/>protocol_parser · eligibility"]
+        D["db/<br/>SQLAlchemy models + repositories"]
+        M["middleware/<br/>RBAC auth · audit · metrics · rate limiting"]
+        SC["schemas/<br/>Pydantic request/response"]
+        R --> S
+        S --> D
+        M -.-> R
+        SC -.-> R
+    end
+
+    subgraph AGENT["<b>agent/</b> — AI agent team"]
+        direction TB
+        A1["main.py<br/>POST /agent/chat"]
+        A2["coordinator.py<br/>delegates to subagents"]
+        A3["subagents.py<br/>6 specialists"]
+        A4["tools.py<br/>LangChain tools → REST"]
+        A1 --> A2 --> A3 --> A4
+    end
+
+    subgraph FE["<b>frontend/</b> — Streamlit UI"]
+        F1["app.py<br/>login + 6 tabs"]
+    end
+
+    subgraph OPS["<b>ops</b> — observability & deployment"]
+        P1["prometheus/ scrape + alert rules"]
+        P2["monitoring/ Grafana dashboards"]
+        P3["kubernetes/ manifests"]
+        P4["docker-compose.yml"]
+    end
+
+    FE --> R
+    AGENT --> R
+```
+
+## Quick start
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env          # adjust secrets for production
+uvicorn app.main:app --reload
+```
+
+Interactive docs: http://localhost:8000/docs · Metrics: http://localhost:8000/api/v1/metrics
+
+Four seed users are created on first startup (dev only):
+
+| Username      | Role          | Password                    |
+|---------------|---------------|-----------------------------|
+| `admin`       | ADMINISTRATOR | `admin-password-change-me`  |
+| `coordinator` | COORDINATOR   | `coordinator-password-change-me` |
+| `provider`    | PROVIDER      | `provider-password-change-me` |
+| `auditor`     | AUDITOR       | `auditor-password-change-me` |
+
+## Docker (full stack)
+
+```bash
+docker compose up --build     # API, agent, UI, Postgres, Redis, Prometheus, Grafana
+```
+
+| Service       | URL                                    |
+|---------------|----------------------------------------|
+| API           | http://localhost:8000/docs             |
+| Web UI        | http://localhost:8501                  |
+| Agent         | http://localhost:8100 (`POST /agent/chat`) |
+| Prometheus    | http://localhost:9090                  |
+| Grafana       | http://localhost:3000 (admin/admin)    |
+| Postgres      | `localhost:5432` (carematch/carematch) |
+| Redis         | `localhost:6379`                       |
+
+## Web UI (Streamlit)
+
+```bash
+pip install -r frontend/requirements.txt
+streamlit run frontend/app.py        # http://localhost:8501
+# API_URL / AGENT_URL env vars override the default localhost endpoints
+```
+
+Tabs:
+
+- **📋 Trials** — create trials (protocol text or structured rules) and inspect
+  parsed rules, status, and protocol version.
+- **🧪 Evaluate** — paste a FHIR R4 Patient/Bundle, run it against a trial, and
+  see the per-rule evidence chain, confidence, and overall recommendation.
+- **✅ Review** — approve an AI recommendation or override individual rules
+  (reasoning is required); watch the review/final status update.
+- **👥 Caregivers** — list and register caregivers with relationship types
+  `PRIMARY`, `EMERGENCY_CONTACT`, `LEGAL_PROXY`, `POWER_OF_ATTORNEY`.
+- **🕵️ Audit** — read the HIPAA audit trail and Prometheus metrics.
+- **🤖 Agent** — chat with the AI agent team and have it do the work for you.
+
+## AI agent team
+
+The `agent/` service is a **coordinator agent** (LangChain) that never calls the
+API directly — it delegates to six specialist subagents, each with its own tool
+subset bound to the CareMatch REST API, then synthesizes their reports:
+
+| Subagent        | Responsibility                                        |
+|-----------------|-------------------------------------------------------|
+| `auth`          | Log in and obtain a session token                     |
+| `trials`        | Create, list, inspect, and update trial protocols     |
+| `eligibility`   | Evaluate a patient (FHIR) against a trial             |
+| `assessments`   | Review, approve, or override AI recommendations       |
+| `caregivers`    | Manage patient caregivers                             |
+| `audit`         | Read the audit trail and system metrics               |
+
+### Multi-agent orchestration
+
+A single user request can fan out across several subagents. The coordinator
+decides the routing, and every subagent shares one `AgentSession`, so a token
+obtained by `auth` is available to every tool:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant Coord as Coordinator<br/>(coordinator.py)
+    participant Auth as auth subagent
+    participant Tri as trials subagent
+    participant Eli as eligibility subagent
+    participant Rev as assessments subagent
+    participant API as CareMatch API
+
+    User->>Coord: "Create a diabetes trial, evaluate Jane, then review the result"
+    Coord->>Auth: delegate login (admin / password)
+    Auth->>API: POST /auth/token
+    API-->>Auth: access_token
+    Auth-->>Coord: "Logged in" (token cached in AgentSession)
+    Coord->>Tri: create trial (bullet protocol text)
+    Tri->>API: POST /trials/create
+    API-->>Tri: trial_id + N parsed rules
+    Tri-->>Coord: trial_id
+    Coord->>Eli: evaluate patient FHIR bundle
+    Eli->>API: POST /patients/evaluate-eligibility
+    API-->>Eli: assessment_id + per-rule evidence
+    Eli-->>Coord: assessment_id, overall status
+    Coord->>Rev: approve assessment
+    Rev->>API: PUT /assessments/{id}/approve
+    API-->>Rev: review_status=APPROVED, final_status
+    Rev-->>Coord: final eligibility
+    Coord-->>User: plain-language summary + IDs
+```
+
+Models come from OpenRouter (free tier by default — `openai/gpt-oss-20b:free`).
+
+```bash
+pip install -r agent/requirements.txt
+uvicorn agent.main:app --port 8100
+# OPENROUTER_API_KEY + OPENROUTER_MODEL set in .env (see .env.example)
+```
+
+Try it:
+
+```bash
+curl -X POST http://localhost:8100/agent/chat -H 'Content-Type: application/json' \
+  -d '{"message": "Log in as admin / admin-password-change-me, then create a diabetes trial and evaluate a 45-year-old patient against it.", "username": "admin", "password": "admin-password-change-me"}'
+```
+
+Design notes:
+
+- The coordinator delegates one task at a time and chains subagents for
+  multi-domain requests (e.g. evaluate → then review the assessment).
+- All subagents share one `AgentSession`, so a token obtained by `auth` is
+  available to every other tool in the same conversation.
+- Rules created from free-text protocols require **bullet-point** lines (the
+  parser skips prose paragraphs) — the trials subagent is prompted to format
+  them accordingly.
+- Overrides always require reasoning; the API enforces it server-side too.
+- Free OpenRouter models are rate-limited and occasionally flaky; retries are
+  enabled in `agent/model.py`.
+
+## Eligibility engine
+
+```mermaid
+flowchart LR
+    subgraph INPUT["Input"]
+        P["Protocol document<br/>(free text or structured rules)"]
+        F["FHIR R4 Patient / Bundle"]
+    end
+    P --> PP["protocol_parser.py<br/>classify lines → rule objects"]
+    PP --> RULES["Rules<br/>age_range · medication · diagnosis<br/>lab_value · temporal · caregiver · description<br/>category: inclusion | exclusion"]
+    F --> FP["fhir_processor.py<br/>normalize → PatientData<br/>+ data completeness score"]
+    RULES --> RE["rules_engine.py<br/>evaluate_rule() per rule"]
+    FP --> RE
+    RE --> AGG{"eligibility.py<br/>aggregate"}
+    AGG -->|"any rule UNCLEAR"| U["UNCLEAR"]
+    AGG -->|"inclusion fails or exclusion matches"| I["LIKELY_INELIGIBLE"]
+    AGG -->|"otherwise"| E["LIKELY_ELIGIBLE"]
+    U --> ASM["Assessment<br/>overall + ai_confidence + evidence<br/>review_status = PENDING"]
+    I --> ASM
+    E --> ASM
+```
+
+1. **Protocol parsing** — `POST /trials/create` accepts either a free-text
+   protocol document or pre-structured rules. The parser classifies each
+   bullet line into a rule type and keeps unclassifiable lines as
+   `description` rules flagged for clinical review.
+2. **Rule types** — `age_range`, `medication`, `diagnosis`, `lab_value`,
+   `temporal`, `caregiver`, and `description`, each with a `category` of
+   `inclusion` or `exclusion`.
+3. **Evaluation** — each rule produces a per-rule `status` (`MATCHES`,
+   `DOES_NOT_MATCH`, `UNCLEAR`), a confidence score, an evidence chain, and a
+   list of missing data.
+4. **Aggregation** —
+   - any `UNCLEAR` rule → overall **UNCLEAR** (needs more information),
+   - any inclusion rule that `DOES_NOT_MATCH` or exclusion rule that
+     `MATCHES` → **LIKELY_INELIGIBLE**,
+   - otherwise → **LIKELY_ELIGIBLE**.
+5. **Human-in-the-loop** — the AI recommendation is **never final**. A
+   coordinator reviews, then either **approves** it or **overrides** individual
+   rule results with mandatory reasoning. The override's impact on overall
+   eligibility is tracked and audited.
+
+### Human-in-the-loop review
+
+```mermaid
+flowchart TD
+    A["Assessment created<br/>review_status = PENDING"] --> R{"Coordinator<br/>decision"}
+    R -->|"approve (FR-051)"| AP["review_status = APPROVED<br/>final_status = overall"]
+    R -->|"override a rule (FR-053)"| OV["PUT /assessments/{id}/override<br/>reasoning REQUIRED"]
+    OV --> RC{"Recalculate overall<br/>from all rule statuses"}
+    RC -->|"any UNCLEAR"| U2["overall = UNCLEAR"]
+    RC -->|"inclusion fails / exclusion matches"| I2["overall = LIKELY_INELIGIBLE"]
+    RC -->|"otherwise"| E2["overall = LIKELY_ELIGIBLE"]
+    U2 --> OD["review_status = OVERRIDDEN<br/>override_count++<br/>impact_on_eligibility tracked"]
+    I2 --> OD
+    E2 --> OD
+    AP --> AUD["audit_logger.log()"]
+    OD --> AUD
+    AUD --> DB[("PostgreSQL")]
+```
+
+## Auditing & compliance
+
+Every auth event, data access, assessment creation, approval, and override is
+written to an audit trail with PII redacted for HIPAA compliance. AUDITOR and
+ADMINISTRATOR roles can read the trail at `/api/v1/audit/logs`.
+
+```mermaid
+flowchart LR
+    E["Event<br/>auth · data access · approve · override"] --> LOG["audit_logger.py<br/>PII redacted"]
+    LOG --> DB[("PostgreSQL<br/>audit_logs")]
+    AUD["AUDITOR / ADMIN"] -->|"GET /api/v1/audit/logs"| LOG
+    DB --> LOG
+```
+
+## Kubernetes
+
+`kubectl apply -f kubernetes/manifests.yaml` deploys the API (2 replicas with
+readiness/liveness probes), a Redis service, and the Postgres secret. Set the
+`carematch-secrets` values for production.
+
+## Environment variables
+
+See `.env.example` for the full list. Highlights:
+
+| Variable                  | Default                        | Purpose                                   |
+|---------------------------|--------------------------------|-------------------------------------------|
+| `DATABASE_URL`            | `sqlite:///./carematch.db`     | SQLAlchemy connection string (Postgres in prod) |
+| `REDIS_URL`               | `redis://localhost:6379/0`     | Cache backend (in-memory fallback)        |
+| `JWT_SECRET`              | `change-me-in-production`      | Token signing secret (set a long random value) |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `15`                       | Access token lifetime                     |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `7`                          | Refresh token lifetime                    |
+| `RATE_LIMIT_PER_MINUTE`   | `100`                          | API rate limit per client                 |
+| `SEED_*_USERNAME/PASSWORD` | dev accounts                 | Seed users created on first startup       |
+| `OPENROUTER_API_KEY`      | (empty)                        | Required for the agent service            |
+| `OPENROUTER_MODEL`        | `openai/gpt-oss-20b:free`      | Agent model slug on OpenRouter            |
+| `AGENT_API_URL`           | `http://localhost:8000`        | API base URL the agent talks to           |
+
+## Testing & quality
+
+```bash
+pip install -r requirements-dev.txt
+pytest                       # full suite (API + agent tools + frontend)
+pytest --cov=app --cov-fail-under=80
+ruff check app agent frontend tests   # lint
+ruff format --check app agent frontend tests
+mypy app agent               # type check
+```
+
+## API surface
+
+All routes are prefixed `/api/v1`.
+
+| Method | Path                                    | Roles                              |
+|--------|-----------------------------------------|------------------------------------|
+| GET    | `/health`, `/ready`                     | public                             |
+| POST   | `/auth/token`                           | public                             |
+| POST   | `/auth/refresh`                         | public                             |
+| GET    | `/auth/me`                              | authenticated                      |
+| POST   | `/patients/evaluate-eligibility`        | PROVIDER, COORDINATOR, ADMIN       |
+| GET    | `/patients/{id}`                        | PROVIDER, COORDINATOR, ADMIN       |
+| POST   | `/trials/create`                        | PROVIDER, ADMIN                    |
+| GET    | `/trials`, `/trials/{id}`               | all roles                          |
+| PUT    | `/trials/{id}`                          | PROVIDER, ADMIN (bumps protocol version) |
+| POST   | `/caregivers`                           | PROVIDER, ADMIN                    |
+| GET    | `/patients/{id}/caregivers`             | PROVIDER, COORDINATOR, ADMIN, AUDITOR |
+| GET    | `/assessments`, `/assessments/{id}`     | PROVIDER, COORDINATOR, ADMIN       |
+| PUT    | `/assessments/{id}/override`            | COORDINATOR, ADMIN                 |
+| PUT    | `/assessments/{id}/approve`             | COORDINATOR, ADMIN                 |
+| GET    | `/assessments/{id}/overrides`           | AUDITOR, ADMIN                     |
+| GET    | `/audit/logs`                           | AUDITOR, ADMIN                     |
+| GET    | `/metrics`                              | public (Prometheus)                |
+
+## Key flows
+
+- **Eligibility** — POST a FHIR bundle → `fhir_processor` normalizes it →
+  `rules_engine` evaluates each rule → `eligibility` aggregates an overall
+  status with per-rule evidence and confidence.
+- **Trial protocols** — providers submit free-text protocols that are parsed
+  into structured rules, or structured rules directly.
+- **Human-in-the-loop** — coordinators override individual rule results with
+  mandatory reasoning; impact on overall eligibility is tracked and audited.
+- **Audit** — every data access, override, and auth event is logged with PII
+  redacted for HIPAA compliance; AUDITOR/ADMIN can read the trail at
+  `/api/v1/audit/logs`.

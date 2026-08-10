@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carematch-api
+  labels:
+    app: carematch
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: carematch
+  template:
+    metadata:
+      labels:
+        app: carematch
+    spec:
+      containers:
+        - name: api
+          image: carematch-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: carematch-secrets
+                  key: database-url
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: carematch-secrets
+                  key: jwt-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: carematch-api
+spec:
+  selector:
+    app: carematch
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: carematch-secrets
+type: Opaque
+stringData:
+  database-url: postgresql+psycopg://carematch:carematch@postgres:5432/carematch
+  jwt-secret: CHANGE_ME_IN_PRODUCTION
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app: redis
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          ports:
+            - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

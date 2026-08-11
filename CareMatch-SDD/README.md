@@ -1,18 +1,35 @@
 # CareMatch
 
-Clinical trial patient eligibility screening with explainable, evidence-backed AI
-recommendations and human-in-the-loop review. FHIR R4 patient data is evaluated
-against trial protocols using a rules engine; every recommendation is traceable
-to evidence, and coordinators can override with mandatory reasoning.
+**Clinical trial patient eligibility screening** with explainable, evidence-backed AI recommendations and human-in-the-loop review.
 
-Built with **FastAPI**, **SQLAlchemy**, and OAuth 2.0-style JWT auth with
-role-based access control (RBAC). Ships with three clients on top of the REST
-API:
+## How It Works
 
-- a **Streamlit web UI** for day-to-day operation,
-- an **AI agent team** (LangChain coordinator + specialist subagents on
-  OpenRouter) that operates the whole system in plain language, and
-- a **Prometheus + Grafana** observability stack.
+CareMatch evaluates patient data against trial protocols to generate **AI-powered eligibility recommendations**:
+
+1. **Input** — Submit a patient record in FHIR R4 JSON format (an international healthcare data standard)
+2. **Rules** — Trial protocols are parsed into structured eligibility rules (age, diagnoses, medications, lab values)
+3. **Evaluation** — Each rule is evaluated with evidence and confidence scoring
+4. **Output** — AI recommendation (eligible/ineligible/unclear) that a human coordinator must review and approve before use
+5. **Audit** — Every decision is logged for HIPAA compliance and override tracking
+
+### Why FHIR?
+
+**FHIR (Fast Healthcare Interoperability Resources)** is the international standard for health data exchange:
+- **JSON-based** — Lightweight, easy to integrate with APIs and modern web services
+- **Structured** — Patient demographics, diagnoses, medications, labs are all in a consistent format
+- **Interoperable** — Works with EHR systems (Epic, Cerner, etc.) and health data platforms
+- **Real-world** — Most hospitals export patient data as FHIR; no manual data entry needed
+
+CareMatch accepts patient data as FHIR R4 JSON and normalizes it internally for rule evaluation.
+
+### Stack
+
+- **FastAPI** backend (Python 3.11) with SQLAlchemy ORM
+- **PostgreSQL** for production, SQLite for development
+- **Redis** for caching
+- **Streamlit** web UI for coordinators
+- **LangChain AI agents** for natural-language automation (optional, OpenRouter)
+- **Prometheus + Grafana** for observability
 
 ## Table of Contents
 
@@ -324,30 +341,25 @@ API_URL=http://localhost:8000 AGENT_URL=http://localhost:8100 streamlit run fron
 
 **UI Tabs:**
 
-- **📋 Trials** — create trials from free-text protocol documents or bullet-point rules.
-  Inspect the parsed rules, status, and protocol version. Rules are re-versioned when
-  protocols change.
+- **📋 Trials** — create trials from free-text protocol documents. Rules are automatically parsed 
+  (age ranges, medications, diagnoses, lab values). Rules are versioned when protocols change.
 
-- **🧪 Evaluate** — paste a **FHIR R4 Patient resource** (single patient demographics)
-  or a **Bundle** (patient + conditions, medications, lab observations, etc.).
-  - **Patient resource**: Recommended for simple demographics only; API will process it as-is.
-  - **Bundle**: Use when you have related clinical data (diagnoses, meds, labs) to include.
-  - Both formats are normalized internally; the engine extracts the same structured data either way.
-  - Results show per-rule evidence, confidence, and overall recommendation (AI recommendation only—
-    requires coordinator approval).
+- **🧪 Evaluate** — submit a patient record as FHIR R4 JSON (standard format). Paste patient demographics 
+  (name, DOB, gender, MRN). The system normalizes the data and evaluates eligibility rule-by-rule. 
+  Results show evidence, confidence, and overall recommendation (AI recommendation only—requires 
+  coordinator approval).
 
-- **✅ Review** — coordinators see all assessments (pending review). For each:
-  - Approve it to finalize the recommendation, OR
-  - Override individual rule results (with mandatory reasoning). Overrides are tracked and audited.
+- **✅ Review** — coordinators review pending assessments. Approve the AI recommendation or 
+  override individual rule results (reasoning required). Overrides are tracked and audited.
 
 - **👥 Caregivers** — register and manage patient caregivers with relationship types:
   `PRIMARY`, `EMERGENCY_CONTACT`, `LEGAL_PROXY`, `POWER_OF_ATTORNEY`.
 
-- **🕵️ Audit** — read the HIPAA audit trail (auth events, data access, approvals, overrides).
-  Filter by date range, user, action type. Also view Prometheus metrics (latency, errors, etc.).
+- **🕵️ Audit** — HIPAA-compliant audit trail (auth events, data access, approvals, overrides).
+  Filter by date, user, action type. Also view Prometheus metrics (latency, errors).
 
-- **🤖 Agent** — chat with the AI agent team to automate workflows in plain language:
-  "Create a diabetes trial, evaluate Jane Smith against it, then approve the assessment."
+- **🤖 Agent** — chat with AI agents to automate workflows in plain language
+  (when `OPENROUTER_API_KEY` is set, limited to 50 calls/day on free tier).
 
 ## AI agent team
 
@@ -451,46 +463,34 @@ flowchart LR
     E --> ASM
 ```
 
-### Data flow and formats
+### FHIR Patient Resource Format
 
-**FHIR Input** — The API accepts two FHIR R4 formats, both of which are normalized to the same internal `PatientData` model:
+CareMatch accepts **FHIR R4 Patient resources** (JSON format):
 
-1. **Patient Resource** (recommended for raw patient data):
-   ```json
-   {
-     "resourceType": "Patient",
-     "id": "p-123",
-     "identifier": [{"system": "http://hospital/mrn", "value": "M-12345"}],
-     "name": [{"family": "Doe", "given": ["Jane"]}],
-     "birthDate": "1980-05-15",
-     "gender": "female"
-   }
-   ```
-   → Use this for demographics-only data (age, gender, name, MRN).
+```json
+{
+  "resourceType": "Patient",
+  "id": "p-123",
+  "identifier": [
+    {"system": "http://hospital/mrn", "value": "M-12345"}
+  ],
+  "name": [
+    {"family": "Doe", "given": ["Jane"]}
+  ],
+  "birthDate": "1980-05-15",
+  "gender": "female"
+}
+```
 
-2. **Bundle** (recommended when you have related clinical data):
-   ```json
-   {
-     "resourceType": "Bundle",
-     "type": "collection",
-     "entry": [
-       {"resource": {"resourceType": "Patient", ...}},
-       {"resource": {"resourceType": "Condition", ...}},
-       {"resource": {"resourceType": "MedicationRequest", ...}},
-       {"resource": {"resourceType": "Observation", ...}}
-     ]
-   }
-   ```
-   → Use this when you have conditions (diagnoses), medications, labs, allergies, procedures, or caregivers.
+**What gets extracted for rule evaluation:**
+- **Demographics**: name, birth date (calculates age automatically), gender, MRN
+- **Medications** (if present in data): drug names, RxNorm codes, active status
+- **Conditions** (if present in data): diagnosis names, ICD-10 codes, clinical status
+- **Lab observations** (if present in data): test names, LOINC codes, values, units
+- **Allergies, procedures** (if present in data)
+- **Data quality score** (0.0–1.0): how complete the record is
 
-Both formats are processed by `fhir_processor.py` to extract a normalized `PatientData` object containing:
-- Demographics (name, birth_date, gender, MRN)
-- Active medications (RxNorm codes, status)
-- Conditions (ICD-10 codes, clinical status, onset dates)
-- Lab observations (LOINC codes, values, units, dates)
-- Allergies and procedures
-- Caregiver relationships and ages
-- Data quality score (0.0–1.0, based on completeness)
+The `fhir_processor.py` normalizes incoming FHIR JSON to an internal `PatientData` model, extracting only fields relevant to eligibility rules.
 
 ### Evaluation flow
 
@@ -564,7 +564,29 @@ See `.env.example` for the full list. Highlights:
 | `OPENROUTER_MODEL`        | `openai/gpt-oss-20b:free`      | Agent model slug on OpenRouter            |
 | `AGENT_API_URL`           | `http://localhost:8000`        | API base URL the agent talks to           |
 
-## Testing & quality
+## API Rate Limiting & Optimization
+
+### OpenRouter (AI Agent) Limits
+
+The AI agent feature uses **OpenRouter's free tier** (50 requests/day):
+- Each `POST /agent/chat` call may trigger **multiple sub-requests** (one per specialist agent)
+- A single user request like *"Create trial, evaluate patient, approve assessment"* = 4–6 API calls
+- **Best practice**: Use the web UI (Streamlit) for routine work; reserve the agent for complex multi-step automation
+
+### Reducing API Calls
+
+1. **Batch operations** — Combine multiple steps in one agent request
+2. **Use the web UI** — Streamlit doesn't call OpenRouter; it calls the internal API directly
+3. **Cache trial data** — List trials once, reuse IDs for multiple evaluations
+4. **Async processing** — Agent requests run in parallel when possible
+
+### Internal API Rate Limiting
+
+The FastAPI backend enforces **100 requests/minute per client** (configurable via `RATE_LIMIT_PER_MINUTE`).
+- Applies to all endpoints except `/health`, `/metrics`
+- Returns `429 Too Many Requests` if exceeded
+
+## Testing & Quality
 
 ```bash
 pip install -r requirements-dev.txt

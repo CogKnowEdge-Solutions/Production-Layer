@@ -51,16 +51,17 @@ services:
       - POSTGRES_USER=carematch
       - POSTGRES_PASSWORD=carematch
       - POSTGRES_DB=carematch
+      - POSTGRES_INITDB_ARGS=-c shared_buffers=256MB -c max_connections=100
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U carematch -d carematch"]
+      test: ["CMD-SHELL", "pg_isready -U carematch -d carematch -h localhost"]
       interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
 
   redis:
     image: redis:7

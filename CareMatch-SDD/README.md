@@ -187,18 +187,73 @@ Four seed users are created on first startup (dev only):
 Runs the API, agent, UI, Postgres, Redis, Prometheus, Alertmanager, and Grafana
 in production mode (`ENV=production`) against Postgres.
 
+**Quick start (3 steps):**
+
 ```bash
-# 1. Set production secrets in your environment (used by compose):
+# 1. Clone and navigate to the project:
+git clone --depth 1 --filter=blob:none --sparse https://github.com/CogKnowEdge-Solutions/Production-Layer.git
+cd Production-Layer && git sparse-checkout set CareMatch-SDD && cd CareMatch-SDD
+
+# 2. Set up environment variables:
+cp .env.example .env
+# Edit .env to set OPENROUTER_API_KEY if you want the agent to work
+# (or leave it empty to skip agent features)
 export JWT_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
-export OPENROUTER_API_KEY="your-openrouter-key"   # required for the agent
 
-# 2. Build and start everything:
+# 3. Build and start everything:
 docker compose up --build -d
-
-# 3. Tail logs / stop:
-docker compose logs -f
-docker compose down          # add -v to drop the Postgres volume (data loss!)
 ```
+
+That's it! The system will auto-initialize the database with seed users on first startup.
+
+**Access the stack:**
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| **Streamlit Web UI** | http://localhost:8501 | Login: `admin` / `admin-password-change-me` |
+| **FastAPI Docs** | http://localhost:8000/docs | Interactive API explorer |
+| **Agent API** | http://localhost:8100 | POST `/agent/chat` for multi-agent requests |
+| **Grafana Dashboards** | http://localhost:3000 | Login: `admin` / `admin` |
+| **Prometheus Metrics** | http://localhost:9090 | Prometheus scrape targets and alerts |
+| **PostgreSQL** | `localhost:5432` | User: `carematch`, Password: `carematch` |
+| **Redis Cache** | `localhost:6379` | In-memory cache (optional, graceful fallback) |
+
+**Manage the stack:**
+
+```bash
+# View logs in real-time:
+docker compose logs -f
+
+# View logs for a single service:
+docker compose logs -f api
+docker compose logs -f frontend
+
+# Stop all containers (keep volumes):
+docker compose down
+
+# Stop and remove volumes (resets database):
+docker compose down -v
+
+# Rebuild after code changes:
+docker compose up --build -d
+```
+
+**Troubleshooting Docker startup:**
+
+1. **API takes 30+ seconds to start?** → It's running database migrations. Check logs: `docker compose logs api`
+2. **"Connection refused" on port 8501?** → Streamlit takes a moment to bind. Wait 10s and refresh.
+3. **"PostgreSQL not ready" error?** → Postgres health check is strict. Retry: `docker compose restart api`
+4. **Database locked error?** → Run `docker compose down -v && docker compose up -d` to reset.
+5. **Agent always times out?** → Missing or invalid `OPENROUTER_API_KEY` in `.env`. Set one or leave feature disabled.
+
+**For production deployments:**
+
+Before deploying to a shared/public environment:
+1. Generate a strong `JWT_SECRET`: `python -c 'import secrets; print(secrets.token_urlsafe(64))'`
+2. Change all `SEED_*` credentials in `.env`
+3. Use a real PostgreSQL instance (not in-container), set `DATABASE_URL` properly
+4. Use a real Redis instance for caching
+5. Point ports through a TLS-terminating reverse proxy (nginx/Caddy/Traefik)
 
 | Service       | URL                                    |
 |---------------|----------------------------------------|
@@ -263,22 +318,36 @@ want Postgres managed in-cluster) a way to persist `postgres` data.
 
 ```bash
 pip install -r frontend/requirements.txt
-streamlit run frontend/app.py        # http://localhost:8501
-# API_URL / AGENT_URL env vars override the default localhost endpoints
+API_URL=http://localhost:8000 AGENT_URL=http://localhost:8100 streamlit run frontend/app.py
+# Or just: streamlit run frontend/app.py (defaults to localhost:8000 and :8100)
 ```
 
-Tabs:
+**UI Tabs:**
 
-- **📋 Trials** — create trials (protocol text or structured rules) and inspect
-  parsed rules, status, and protocol version.
-- **🧪 Evaluate** — paste a FHIR R4 Patient/Bundle, run it against a trial, and
-  see the per-rule evidence chain, confidence, and overall recommendation.
-- **✅ Review** — approve an AI recommendation or override individual rules
-  (reasoning is required); watch the review/final status update.
-- **👥 Caregivers** — list and register caregivers with relationship types
+- **📋 Trials** — create trials from free-text protocol documents or bullet-point rules.
+  Inspect the parsed rules, status, and protocol version. Rules are re-versioned when
+  protocols change.
+
+- **🧪 Evaluate** — paste a **FHIR R4 Patient resource** (single patient demographics)
+  or a **Bundle** (patient + conditions, medications, lab observations, etc.).
+  - **Patient resource**: Recommended for simple demographics only; API will process it as-is.
+  - **Bundle**: Use when you have related clinical data (diagnoses, meds, labs) to include.
+  - Both formats are normalized internally; the engine extracts the same structured data either way.
+  - Results show per-rule evidence, confidence, and overall recommendation (AI recommendation only—
+    requires coordinator approval).
+
+- **✅ Review** — coordinators see all assessments (pending review). For each:
+  - Approve it to finalize the recommendation, OR
+  - Override individual rule results (with mandatory reasoning). Overrides are tracked and audited.
+
+- **👥 Caregivers** — register and manage patient caregivers with relationship types:
   `PRIMARY`, `EMERGENCY_CONTACT`, `LEGAL_PROXY`, `POWER_OF_ATTORNEY`.
-- **🕵️ Audit** — read the HIPAA audit trail and Prometheus metrics.
-- **🤖 Agent** — chat with the AI agent team and have it do the work for you.
+
+- **🕵️ Audit** — read the HIPAA audit trail (auth events, data access, approvals, overrides).
+  Filter by date range, user, action type. Also view Prometheus metrics (latency, errors, etc.).
+
+- **🤖 Agent** — chat with the AI agent team to automate workflows in plain language:
+  "Create a diabetes trial, evaluate Jane Smith against it, then approve the assessment."
 
 ## AI agent team
 
@@ -366,7 +435,7 @@ Design notes:
 flowchart LR
     subgraph INPUT["Input"]
         P["Protocol document<br/>(free text or structured rules)"]
-        F["FHIR R4 Patient / Bundle"]
+        F["FHIR R4<br/>Patient or Bundle"]
     end
     P --> PP["protocol_parser.py<br/>classify lines → rule objects"]
     PP --> RULES["Rules<br/>age_range · medication · diagnosis<br/>lab_value · temporal · caregiver · description<br/>category: inclusion | exclusion"]
@@ -381,6 +450,49 @@ flowchart LR
     I --> ASM
     E --> ASM
 ```
+
+### Data flow and formats
+
+**FHIR Input** — The API accepts two FHIR R4 formats, both of which are normalized to the same internal `PatientData` model:
+
+1. **Patient Resource** (recommended for raw patient data):
+   ```json
+   {
+     "resourceType": "Patient",
+     "id": "p-123",
+     "identifier": [{"system": "http://hospital/mrn", "value": "M-12345"}],
+     "name": [{"family": "Doe", "given": ["Jane"]}],
+     "birthDate": "1980-05-15",
+     "gender": "female"
+   }
+   ```
+   → Use this for demographics-only data (age, gender, name, MRN).
+
+2. **Bundle** (recommended when you have related clinical data):
+   ```json
+   {
+     "resourceType": "Bundle",
+     "type": "collection",
+     "entry": [
+       {"resource": {"resourceType": "Patient", ...}},
+       {"resource": {"resourceType": "Condition", ...}},
+       {"resource": {"resourceType": "MedicationRequest", ...}},
+       {"resource": {"resourceType": "Observation", ...}}
+     ]
+   }
+   ```
+   → Use this when you have conditions (diagnoses), medications, labs, allergies, procedures, or caregivers.
+
+Both formats are processed by `fhir_processor.py` to extract a normalized `PatientData` object containing:
+- Demographics (name, birth_date, gender, MRN)
+- Active medications (RxNorm codes, status)
+- Conditions (ICD-10 codes, clinical status, onset dates)
+- Lab observations (LOINC codes, values, units, dates)
+- Allergies and procedures
+- Caregiver relationships and ages
+- Data quality score (0.0–1.0, based on completeness)
+
+### Evaluation flow
 
 1. **Protocol parsing** — `POST /trials/create` accepts either a free-text
    protocol document or pre-structured rules. The parser classifies each

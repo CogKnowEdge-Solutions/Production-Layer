@@ -30,6 +30,15 @@ SEED_CREDENTIALS = {
     "auditor": "auditor-password-change-me",
 }
 
+SAMPLE_FHIR_PATIENT = {
+    "resourceType": "Patient",
+    "id": "p-100",
+    "identifier": [{"system": "http://hospital/mrn", "value": "M-1000"}],
+    "name": [{"family": "Doe", "given": ["Jane"]}],
+    "birthDate": "1980-05-15",
+    "gender": "female",
+}
+
 SAMPLE_FHIR_BUNDLE = {
     "resourceType": "Bundle",
     "type": "collection",
@@ -233,11 +242,24 @@ with tab_eval:
     else:
         options = {f"{t['trial_name']} ({t['status']})": str(t["trial_id"]) for t in trials}
         selected = st.selectbox("Trial", list(options.keys()), key="eval_trial")
+
+        format_col, example_col = st.columns(2)
+        with format_col:
+            data_format = st.radio(
+                "FHIR Data Format",
+                ["Patient Resource (recommended)", "Bundle (with related resources)"],
+                help="Patient Resource: single patient demographics. Bundle: patient + conditions, medications, labs, etc."
+            )
+
+        default_data = SAMPLE_FHIR_PATIENT if "Patient" in data_format else SAMPLE_FHIR_BUNDLE
+
         fhir_text = st.text_area(
-            "FHIR R4 bundle (JSON)",
-            value=json.dumps(SAMPLE_FHIR_BUNDLE, indent=2),
-            height=280,
+            "FHIR R4 JSON Data",
+            value=json.dumps(default_data, indent=2),
+            height=300,
+            help="Paste your FHIR R4 Patient resource or Bundle. The API normalizes both formats internally."
         )
+
         if st.button("Evaluate", type="primary"):
             try:
                 fhir = json.loads(fhir_text)

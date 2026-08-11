@@ -13,7 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY app ./app
 
-RUN useradd --create-home --uid 1000 carematch
+RUN useradd --create-home --uid 1000 carematch \
+    && chown -R carematch:carematch /app
 USER carematch
 
 EXPOSE 8000

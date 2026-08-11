@@ -243,21 +243,14 @@ with tab_eval:
         options = {f"{t['trial_name']} ({t['status']})": str(t["trial_id"]) for t in trials}
         selected = st.selectbox("Trial", list(options.keys()), key="eval_trial")
 
-        format_col, example_col = st.columns(2)
-        with format_col:
-            data_format = st.radio(
-                "FHIR Data Format",
-                ["Patient Resource (recommended)", "Bundle (with related resources)"],
-                help="Patient Resource: single patient demographics. Bundle: patient + conditions, medications, labs, etc."
-            )
-
-        default_data = SAMPLE_FHIR_PATIENT if "Patient" in data_format else SAMPLE_FHIR_BUNDLE
+        st.markdown("**FHIR R4 Patient Data Format**")
+        st.caption("Enter patient demographics (name, DOB, gender, MRN). Data normalizes to internal format for rule evaluation.")
 
         fhir_text = st.text_area(
-            "FHIR R4 JSON Data",
-            value=json.dumps(default_data, indent=2),
+            "Patient JSON (see format in sidebar)",
+            value=json.dumps(SAMPLE_FHIR_PATIENT, indent=2),
             height=300,
-            help="Paste your FHIR R4 Patient resource or Bundle. The API normalizes both formats internally."
+            help="FHIR R4 Patient resource with demographics"
         )
 
         if st.button("Evaluate", type="primary"):

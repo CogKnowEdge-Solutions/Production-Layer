@@ -58,6 +58,28 @@ LANGSMITH_WORKSPACE_ID=your-own-workspace-id-here
 ```
 That one extra line is what fixes the `403 Forbidden` — without it, a Service key simply won't work, and the error message LangSmith gives you doesn't say why.
 
+### Finding Your Workspace ID the Reliable Way
+
+LangSmith's website doesn't have an obvious place that shows your workspace ID directly — it can be surprisingly hard to find by clicking around. The most reliable way is to ask LangSmith's own servers directly with one command. It asks the server "which workspaces does this key belong to?", and the answer includes the exact ID you need.
+
+**For PowerShell (most common on Windows):**
+
+```
+curl.exe -s -w "`nHTTP status: %{http_code}`n" https://api.smith.langchain.com/workspaces -H "x-api-key: YOUR_LANGSMITH_API_KEY_HERE"
+```
+
+**For Mac, Linux, or Windows Command Prompt:**
+
+```
+curl -s -w "\nHTTP status: %{http_code}\n" https://api.smith.langchain.com/workspaces -H "x-api-key: YOUR_LANGSMITH_API_KEY_HERE"
+```
+
+How to read the result:
+
+1. **Replace `YOUR_LANGSMITH_API_KEY_HERE` with your real key** from your `.env` file (the value of the `LANGSMITH_API_KEY=...` line) before running the command.
+2. **On Windows, this must be run in PowerShell using `curl.exe` specifically** — not plain `curl`. Plain `curl` secretly runs a different Windows command (`Invoke-WebRequest`) that doesn't understand this syntax and will show a confusing error like `Missing an argument for parameter 'SessionVariable'`. Using `curl.exe` (with the `.exe` on the end) makes PowerShell use the real curl program, which works.
+3. **A successful run shows real JSON text ending in `HTTP status: 200`.** Inside that JSON, look for a field called `id` — that long string (something like `3d46e6ff-4cba-4827-a504-b69772d9b27c`) is your workspace ID. Copy that value into the `LANGSMITH_WORKSPACE_ID=` line in your `.env` file.
+
 **Nothing here is required just to start the app** — but for any real use or demo, `LLM_MODE=real` with a valid key is the expected configuration. Without a key, assessments fail loudly with an error rather than silently returning placeholder answers; the app never fakes a result by accident. The free developer testing mode is reserved for running the automated test suite, not for demos.
 
 ---

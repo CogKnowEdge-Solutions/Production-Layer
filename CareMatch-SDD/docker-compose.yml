@@ -39,8 +39,8 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - API_URL=http://localhost:8000
-      - AGENT_URL=http://localhost:8100
+      - API_URL=http://api:8000
+      - AGENT_URL=http://agent:8100
     depends_on:
       - api
       - agent

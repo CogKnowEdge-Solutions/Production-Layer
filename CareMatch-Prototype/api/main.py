@@ -6,10 +6,11 @@ Persistence: trials, assessments, and coordinator decisions live in a
 SQLite database (api/db.py), not in memory -- a hard process kill no
 longer loses anything (that's proven by a real kill-and-restart test).
 
-LLM_MODE controls cost: "real" (default) makes actual LLM calls through
-Phase 1's llm_client. "fake" always returns "unclear" with zero cost and
-zero network calls -- use this to test the API's plumbing (does routing,
-validation, and error handling work?) without spending anything.
+Real AI only: every assessment always goes through Phase 1's llm_client
+and makes an actual LLM call. There is no test-mode toggle in this code --
+tests substitute a mock for llm_client.call_real_llm from the test file
+itself, so the application contains zero knowledge that the substitution
+is happening.
 """
 
 import logging
@@ -29,10 +30,10 @@ from pydantic import BaseModel, field_validator
 
 import db
 
-# Loads api/.env if one exists. This is the reliable way to set LLM_MODE
-# (and real API keys, later) -- it works the same regardless of which
-# shell/terminal you're using, unlike `set` or `$env:` which differ between
-# Command Prompt and PowerShell and are easy to get wrong.
+# Loads api/.env if one exists. This is the reliable way to set real API
+# keys -- it works the same regardless of which shell/terminal you're
+# using, unlike `set` or `$env:` which differ between Command Prompt and
+# PowerShell and are easy to get wrong.
 load_dotenv()
 
 # reasoning_engine/ is a sibling directory, not an installed package.
@@ -224,16 +225,6 @@ class DecisionRequest(BaseModel):
     reason: str | None = None
 
 
-def _fake_llm(rule_text: str, patient_record: str, category: str) -> dict:
-    """
-    Zero-cost stand-in for LLM_MODE=fake. Always returns "unclear" -- this
-    only proves the request reached the engine and came back in the right
-    shape. It does NOT test reasoning quality (that's what Phase 1's
-    run_real_assessment.py is for).
-    """
-    return {"status": "unclear", "evidence": "FAKE MODE -- no real LLM call was made"}
-
-
 def _protocol_from_row(row: dict) -> Protocol:
     return Protocol(
         trial_id=row["trial_id"],
@@ -306,16 +297,13 @@ def assess(body: AssessRequest):
         )
     protocol = _protocol_from_row(trial_row)
 
-    llm_mode = os.environ.get("LLM_MODE", "real").lower()
-    call_llm = _fake_llm if llm_mode == "fake" else llm_client.call_real_llm
-
     start = time.monotonic()
     try:
         result = assess_patient(
             patient_id=body.patient_id,
             patient_record=body.patient_record,
             protocol=protocol,
-            call_llm=call_llm,
+            call_llm=llm_client.call_real_llm,
         )
     except llm_client.LLMError as exc:
         raise HTTPException(status_code=502, detail=f"LLM error: {exc}") from exc
@@ -329,14 +317,11 @@ def assess(body: AssessRequest):
     # Traceability: record exactly which provider/model actually produced
     # this assessment, resolved the same way llm_client itself resolves it,
     # so this is never guessed or out of sync with what really ran.
-    if llm_mode == "fake":
-        provider_used, model_used = "fake", "fake-mode-no-llm-call"
+    provider_used = os.environ.get("LLM_PROVIDER", "openrouter").lower()
+    if provider_used == "anthropic":
+        model_used = os.environ.get("ANTHROPIC_MODEL", llm_client.DEFAULT_ANTHROPIC_MODEL)
     else:
-        provider_used = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-        if provider_used == "anthropic":
-            model_used = os.environ.get("ANTHROPIC_MODEL", llm_client.DEFAULT_ANTHROPIC_MODEL)
-        else:
-            model_used = os.environ.get("OPENROUTER_MODEL", llm_client.DEFAULT_OPENROUTER_MODEL)
+        model_used = os.environ.get("OPENROUTER_MODEL", llm_client.DEFAULT_OPENROUTER_MODEL)
 
     record = AssessmentRecord(
         assessment_id=str(uuid.uuid4()),

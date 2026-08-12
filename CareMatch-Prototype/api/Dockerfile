@@ -17,9 +17,6 @@ COPY reasoning_engine /app/reasoning_engine
 # running from /app/api resolves it to /app/reasoning_engine.
 WORKDIR /app/api
 
-# "real" is the image default so a bare `docker run` (no compose override)
-# can never silently land in free testing mode.
-ENV LLM_MODE=real
 EXPOSE 8000
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

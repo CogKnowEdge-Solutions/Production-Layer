@@ -76,7 +76,7 @@ leave it running in the background). Then copy the environment template and
 add your AI API key:
 
 ```bash
-cp .env.example .env      # then set LLM_MODE=real and ANTHROPIC_API_KEY
+cp .env.example .env      # then set ANTHROPIC_API_KEY
 ```
 
 ### 3. Next steps
@@ -277,7 +277,7 @@ Notice: no confidence score, no flat "yes." Just a status, a quote, and a note t
 
 ## Running It Yourself
 
-**The normal way to run CareMatch is with real AI (`LLM_MODE=real`).** Before any client demo, confirm the top-level `.env` has `LLM_MODE=real` and a valid API key — a missing key fails loudly with a 502, never quietly. There is also a **free developer testing mode** that returns placeholder answers; it exists only for the automated test suite and plumbing checks, and it must never be active during a demo. See `setup_guide.md` for full step-by-step instructions.
+**CareMatch always runs with real AI.** Before any client demo, confirm the top-level `.env` has a valid API key — a missing key fails loudly with a 502, never quietly. Every assessment makes a real, paid call to the AI model. See `setup_guide.md` for full step-by-step instructions.
 
 **Everything at once, with Docker (recommended):**
 ```bash
@@ -310,7 +310,7 @@ npm run dev
 
 ## Environment Variables
 
-**`LLM_MODE=real` is the normal configuration and the default.** Each variable below is only needed if you want to turn on the specific feature it controls. The free developer testing mode (`LLM_MODE=fake`) is for running the automated test suite without cost — it is never the configuration you run a real demo with.
+**CareMatch always makes real AI calls** — every assessment uses a small amount of API credits. The automated test suite is the exception: it substitutes a mock for the AI call from inside the test file itself, so tests are free to run and never touch the real API. Each variable below is only needed if you want to turn on the specific feature it controls.
 
 There are two different `.env` files depending on how you're running things:
 
@@ -321,11 +321,10 @@ There are two different `.env` files depending on how you're running things:
 
 | Variable | What It Does | Required When |
 |---|---|---|
-| `LLM_MODE` | `"real"` (default, normal) actually calls the AI model. `"fake"` is a **free developer testing mode** that returns placeholder answers — used only by the automated test suite, never in a real demo | Never — defaults to `"real"` |
 | `LLM_PROVIDER` | Which AI service to use: `"anthropic"` or `"openrouter"` | Never — has a default |
-| `ANTHROPIC_API_KEY` | Your Anthropic key | Only if `LLM_MODE=real` and `LLM_PROVIDER=anthropic` |
+| `ANTHROPIC_API_KEY` | Your Anthropic key | Only if `LLM_PROVIDER=anthropic` |
 | `ANTHROPIC_MODEL` | Which Anthropic model to use | Never — has a default |
-| `OPENROUTER_API_KEY` | Your OpenRouter key | Only if `LLM_MODE=real` and `LLM_PROVIDER=openrouter` |
+| `OPENROUTER_API_KEY` | Your OpenRouter key | Only if `LLM_PROVIDER=openrouter` |
 | `OPENROUTER_MODEL` | Which model via OpenRouter | Never — has a default |
 | `LANGSMITH_TRACING` | `"true"` turns on permanent AI decision logging | Never — defaults to off |
 | `LANGSMITH_API_KEY` | Your LangSmith key | Only if `LANGSMITH_TRACING=true` |
@@ -357,11 +356,11 @@ While Prometheus shows *how many* checks ran, LangSmith shows the actual *conten
 ## Testing
 
 ```bash
-# Reasoning engine tests (no API key needed — uses a fake AI for testing)
+# Reasoning engine tests (no API key needed — injects a fake LLM for testing)
 cd reasoning_engine
 pytest test_engine.py -v
 
-# API tests (also free — forces fake mode automatically, uses a throwaway database)
+# API tests (also free — mocks the LLM call from the test file, uses a throwaway database)
 cd api
 pytest test_api.py -v
 ```

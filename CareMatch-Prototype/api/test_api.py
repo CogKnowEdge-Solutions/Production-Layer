@@ -1,8 +1,10 @@
 """
 Tests the API's HTTP layer: routing, validation, trial registration/lookup,
-and error handling. Forces LLM_MODE=fake so these never cost anything or
-touch the network -- they prove the plumbing works, not reasoning quality
-(that's Phase 1's job, already proven separately).
+and error handling. The real LLM call is replaced with a deterministic mock
+via unittest.mock.patch -- patching llm_client.call_real_llm from the test
+file, never inside main.py -- so these tests cost nothing, make zero network
+calls, and prove the plumbing works. Reasoning quality is proven separately
+against the real model, not in these tests.
 
 Also: since the API now persists to SQLite, tests run against a throwaway
 temp DB (never the real one), and one test proves the data really lands on
@@ -12,8 +14,10 @@ half of the "survives a hard kill" proof.
 
 import os
 import tempfile
+from unittest import mock
 
-os.environ["LLM_MODE"] = "fake"
+import pytest
+
 os.environ["CAREMATCH_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "carematch-test.db")
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -21,6 +25,19 @@ from fastapi.testclient import TestClient  # noqa: E402
 from main import app  # noqa: E402
 
 client = TestClient(app)
+
+MOCKED_LLM_RESPONSE = {"status": "unclear", "evidence": "mocked for testing"}
+
+
+@pytest.fixture(autouse=True)
+def _mock_real_llm():
+    """Stand in for llm_client.call_real_llm across the whole test file.
+    main.py contains zero knowledge of this substitution -- it always calls
+    llm_client.call_real_llm, and the tests simply point that module
+    attribute at a deterministic fake, so no test ever makes a real paid
+    API call."""
+    with mock.patch("llm_client.call_real_llm", return_value=MOCKED_LLM_RESPONSE):
+        yield
 
 
 def test_list_trials_returns_all_registered_trials():
@@ -49,7 +66,8 @@ def test_list_trials_returns_all_registered_trials():
 
 def test_assess_records_which_provider_and_model_were_used():
     """Harness traceability: every assessment must record exactly which
-    model produced it, not leave that implicit or guessable."""
+    model produced it, resolved from the real provider config -- not left
+    implicit or guessable."""
     client.post(
         "/trials",
         json={
@@ -58,14 +76,17 @@ def test_assess_records_which_provider_and_model_were_used():
             "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
         },
     )
-    r = client.post(
-        "/assess",
-        json={"trial_id": "T-TRACE-TEST", "patient_id": "P-1", "patient_record": "record"},
-    )
+    with mock.patch.dict(
+        os.environ,
+        {"LLM_PROVIDER": "anthropic", "ANTHROPIC_MODEL": "claude-test-model"},
+    ):
+        r = client.post(
+            "/assess",
+            json={"trial_id": "T-TRACE-TEST", "patient_id": "P-1", "patient_record": "record"},
+        )
     data = r.json()
-    # LLM_MODE=fake for this whole test file, so we expect the fake markers
-    assert data["provider_used"] == "fake"
-    assert data["model_used"] == "fake-mode-no-llm-call"
+    assert data["provider_used"] == "anthropic"
+    assert data["model_used"] == "claude-test-model"
 
 
 def test_metrics_endpoint_exposes_carematch_specific_metrics():
@@ -93,7 +114,7 @@ def test_metrics_endpoint_exposes_carematch_specific_metrics():
     assert "reasoning_duration_seconds" in metrics_text
     assert "coordinator_decisions_total" in metrics_text
     # Confirm the label values we expect actually show up, not just the metric names
-    assert 'suggested_status="needs_more_info"' in metrics_text  # fake mode always returns this
+    assert 'suggested_status="needs_more_info"' in metrics_text  # mocked LLM always returns unclear
     assert 'decision="accepted"' in metrics_text
 
 
@@ -135,7 +156,7 @@ def test_assess_unknown_trial_returns_404():
     assert r.status_code == 404
 
 
-def test_assess_with_fake_llm_returns_correct_schema():
+def test_assess_with_mocked_llm_returns_correct_schema():
     client.post(
         "/trials",
         json={
@@ -159,7 +180,7 @@ def test_assess_with_fake_llm_returns_correct_schema():
     assert data["decision"] is None  # never pre-decided, ever
     assessment = data["assessment"]
 
-    # Fake LLM always says "unclear" -> aggregation must produce needs_more_info
+    # Mocked LLM always says "unclear" -> aggregation must produce needs_more_info
     assert assessment["suggested_status"] == "needs_more_info"
     assert assessment["requires_coordinator_approval"] is True
     assert len(assessment["rule_results"]) == 2
@@ -229,7 +250,7 @@ def test_list_assessments_returns_lightweight_summary_of_every_assessment():
         "created_at",
     }
     assert row["trial_id"] == "T-HISTORY-TEST"
-    assert row["suggested_status"] == "needs_more_info"  # fake LLM always
+    assert row["suggested_status"] == "needs_more_info"  # mocked LLM always returns unclear
     assert isinstance(row["created_at"], str) and row["created_at"]
 
     # Decision values come through correctly per assessment.

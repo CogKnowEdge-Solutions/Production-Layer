@@ -1,3 +1,5 @@
+spaces
+gradio
 fastapi
 uvicorn
 pydantic

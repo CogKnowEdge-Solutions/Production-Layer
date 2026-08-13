@@ -76,7 +76,7 @@ leave it running in the background). Then copy the environment template and
 add your AI API key:
 
 ```bash
-cp .env.example .env      # then set LLM_MODE=real and ANTHROPIC_API_KEY
+cp .env.example .env      # then set ANTHROPIC_API_KEY
 ```
 
 ### 3. Next steps
@@ -220,7 +220,7 @@ flowchart TD
 | Piece | What It's Built With | Why |
 |---|---|---|
 | Reasoning Engine | Python, Pydantic | Pydantic forces every AI answer to follow our exact required shape — an answer that doesn't fit gets rejected automatically |
-| AI Model Access | Anthropic Claude (direct) or OpenRouter | Two ways to reach an AI model, switchable with one setting, no code changes needed |
+| AI Model Access | Anthropic Claude (direct) | Every assessment calls Anthropic directly; model is switchable via one env var, no code changes needed |
 | API | FastAPI | Lightweight, fast, and automatically generates interactive docs |
 | Persistence | SQLite | A real, permanent database that needs no separate server — one file on disk. Trials, assessments, and decisions all survive a restart |
 | Dashboard | React + TanStack Start + Tailwind CSS | A modern, fast web app framework |
@@ -243,6 +243,8 @@ flowchart TD
 | GET | `/assessments` | List every assessment ever run, newest first (Assessment History view) |
 | GET | `/assessments/{assessment_id}` | Look up a past assessment |
 | POST | `/assessments/{assessment_id}/decision` | Record the coordinator's decision — Accept, Deny, or Needs More Review |
+| DELETE | `/assessments/{assessment_id}` | Permanently delete an assessment, its per-rule results, and any recorded decision (204; unknown id → 404) |
+| DELETE | `/trials/{trial_id}` | Delete a trial and its rulebook (204; refused with 409 while any assessments reference it) |
 
 Every response also includes an `X-Request-ID` header — a unique ID for that specific request, useful for tracing a problem through the logs later (see [Monitoring, Logging & Tracing](#monitoring-logging--tracing)).
 
@@ -277,7 +279,7 @@ Notice: no confidence score, no flat "yes." Just a status, a quote, and a note t
 
 ## Running It Yourself
 
-**The normal way to run CareMatch is with real AI (`LLM_MODE=real`).** Before any client demo, confirm the top-level `.env` has `LLM_MODE=real` and a valid API key — a missing key fails loudly with a 502, never quietly. There is also a **free developer testing mode** that returns placeholder answers; it exists only for the automated test suite and plumbing checks, and it must never be active during a demo. See `setup_guide.md` for full step-by-step instructions.
+**CareMatch always runs with real AI.** Before any client demo, confirm the top-level `.env` has a valid API key — a missing key fails loudly with a 502, never quietly. Every assessment makes a real, paid call to the AI model. See `setup_guide.md` for full step-by-step instructions.
 
 **Everything at once, with Docker (recommended):**
 ```bash
@@ -310,7 +312,7 @@ npm run dev
 
 ## Environment Variables
 
-**`LLM_MODE=real` is the normal configuration and the default.** Each variable below is only needed if you want to turn on the specific feature it controls. The free developer testing mode (`LLM_MODE=fake`) is for running the automated test suite without cost — it is never the configuration you run a real demo with.
+**CareMatch always makes real AI calls** — every assessment uses a small amount of API credits. The automated test suite is the exception: it substitutes a mock for the AI call from inside the test file itself, so tests are free to run and never touch the real API. Each variable below is only needed if you want to turn on the specific feature it controls.
 
 There are two different `.env` files depending on how you're running things:
 
@@ -321,12 +323,8 @@ There are two different `.env` files depending on how you're running things:
 
 | Variable | What It Does | Required When |
 |---|---|---|
-| `LLM_MODE` | `"real"` (default, normal) actually calls the AI model. `"fake"` is a **free developer testing mode** that returns placeholder answers — used only by the automated test suite, never in a real demo | Never — defaults to `"real"` |
-| `LLM_PROVIDER` | Which AI service to use: `"anthropic"` or `"openrouter"` | Never — has a default |
-| `ANTHROPIC_API_KEY` | Your Anthropic key | Only if `LLM_MODE=real` and `LLM_PROVIDER=anthropic` |
+| `ANTHROPIC_API_KEY` | Your Anthropic key | Always — every assessment makes a real call to Anthropic directly |
 | `ANTHROPIC_MODEL` | Which Anthropic model to use | Never — has a default |
-| `OPENROUTER_API_KEY` | Your OpenRouter key | Only if `LLM_MODE=real` and `LLM_PROVIDER=openrouter` |
-| `OPENROUTER_MODEL` | Which model via OpenRouter | Never — has a default |
 | `LANGSMITH_TRACING` | `"true"` turns on permanent AI decision logging | Never — defaults to off |
 | `LANGSMITH_API_KEY` | Your LangSmith key | Only if `LANGSMITH_TRACING=true` |
 | `LANGSMITH_PROJECT` | Which LangSmith project traces go into | Never — has a default |
@@ -357,11 +355,11 @@ While Prometheus shows *how many* checks ran, LangSmith shows the actual *conten
 ## Testing
 
 ```bash
-# Reasoning engine tests (no API key needed — uses a fake AI for testing)
+# Reasoning engine tests (no API key needed — injects a fake LLM for testing)
 cd reasoning_engine
 pytest test_engine.py -v
 
-# API tests (also free — forces fake mode automatically, uses a throwaway database)
+# API tests (also free — mocks the LLM call from the test file, uses a throwaway database)
 cd api
 pytest test_api.py -v
 ```

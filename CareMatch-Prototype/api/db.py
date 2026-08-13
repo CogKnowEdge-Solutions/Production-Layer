@@ -147,6 +147,46 @@ def list_trials() -> list[dict]:
         return result
 
 
+def count_assessments_for_trial(trial_id: str) -> int:
+    """How many assessments currently reference this trial -- the number a
+    delete would orphan. The audit trail is the whole point of this
+    project, so a trial that has historical assessments against it can
+    never be deleted silently."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM assessments WHERE trial_id = ?", (trial_id,)
+        ).fetchone()
+        return row[0]
+
+
+def delete_trial(trial_id: str) -> bool:
+    """Delete a trial and its rules ONLY if no assessment references it.
+    Returns False (and deletes nothing) when assessments exist -- the caller
+    turns that into a 409, so deleting a trial can never silently orphan or
+    destroy historical assessment evidence. When it does delete, the rules
+    rows go via the schema's ON DELETE CASCADE."""
+    with _connect() as conn:
+        referencing = conn.execute(
+            "SELECT COUNT(*) FROM assessments WHERE trial_id = ?", (trial_id,)
+        ).fetchone()[0]
+        if referencing > 0:
+            return False
+        cursor = conn.execute("DELETE FROM trials WHERE trial_id = ?", (trial_id,))
+        return cursor.rowcount > 0
+
+
+def delete_assessment(assessment_id: str) -> bool:
+    """Permanently remove an assessment. rule_results and the decision row
+    are removed by the schema's ON DELETE CASCADE (see SCHEMA: both tables
+    declare it on assessment_id) -- one transaction, nothing orphaned.
+    Returns False if no such assessment exists (caller returns a 404)."""
+    with _connect() as conn:
+        cursor = conn.execute(
+            "DELETE FROM assessments WHERE assessment_id = ?", (assessment_id,)
+        )
+        return cursor.rowcount > 0
+
+
 def save_assessment(
     assessment_id: str,
     trial_id: str,

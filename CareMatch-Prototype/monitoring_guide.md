@@ -72,6 +72,32 @@ coordinator_decisions_total
 
 How many coordinator decisions have been recorded (Accept, Deny, or Needs More Review).
 
+The four guardrail metrics below are the system's own honesty counters — how often its safety checks fired. The first three are **input guardrails**, checked before anything is sent to the AI; the last one is the **output guardrail**, checked after the AI answers.
+
+```
+input_length_rejected_total
+```
+
+How many patient records were rejected before reaching the AI because they were over the 10,000-character limit.
+
+```
+input_pii_rejected_total
+```
+
+How many records were rejected because they looked like they contained personal information — an SSN-format number, an email address, or a phone number. The error message never echoes the matched value back.
+
+```
+input_injection_rejected_total
+```
+
+How many records were rejected because they looked like they contained prompt-injection-style instructions (for example, "ignore previous instructions").
+
+```
+hallucinated_evidence_caught_total
+```
+
+How many times the output guardrail caught the AI quoting evidence that isn't actually in the patient record. Each one was overridden to `unclear` instead of trusting a possibly made-up quote. This is the most important guardrail metric: it's the system's own count of its AI hallucinating, so a number above zero is worth looking at.
+
 **Why a brand-new install shows mostly zeros:** these are counting numbers. They start at zero and only go up as the app actually gets used. If you installed the app two minutes ago and haven't clicked anything yet, there's nothing to have counted — so you'll see `0`, or no result at all for `rate(...)`. A rate of change needs something to have changed. That is normal, not a fault. (See the troubleshooting note at the end.)
 
 ---

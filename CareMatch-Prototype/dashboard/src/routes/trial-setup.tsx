@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
-import { registerTrial, ApiError, type RuleCategory } from "@/lib/api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { registerTrial, getTrial, ApiError, type RuleCategory, type Trial } from "@/lib/api";
 
 export const Route = createFileRoute("/trial-setup")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    edit: typeof search["edit"] === "string" ? search["edit"] : "",
+  }),
   head: () => ({
     meta: [
       { title: "Trial Setup — Define Protocol Criteria | CareMatch" },
@@ -37,11 +40,43 @@ function isRiskyExclusionPhrasing(row: Row): boolean {
 }
 
 function TrialSetup() {
+  const { edit } = Route.useSearch();
+  const isEditing = edit !== "";
+
+  // Fetch existing trial data when editing
+  const trialQuery = useQuery({
+    queryKey: ["trial", edit],
+    queryFn: () => getTrial(edit),
+    enabled: isEditing,
+  });
+
   const [name, setName] = useState("");
   const [id, setId] = useState("");
   const [rows, setRows] = useState<Row[]>([
     { key: 1, code: "INC-01", text: "", kind: "inclusion" },
   ]);
+
+  // Pre-fill form when editing
+  useEffect(() => {
+    if (isEditing && trialQuery.data) {
+      const trial = trialQuery.data;
+      setName(trial.trial_name);
+      setId(trial.trial_id);
+      setRows(
+        trial.rules.map((r, i) => ({
+          key: i + 1,
+          code: r.rule_id,
+          text: r.rule_text,
+          kind: r.category,
+        }))
+      );
+    } else if (!isEditing) {
+      // Reset form for new trial
+      setName("");
+      setId("");
+      setRows([{ key: 1, code: "INC-01", text: "", kind: "inclusion" }]);
+    }
+  }, [isEditing, trialQuery.data]);
 
   const saveMutation = useMutation({
     mutationFn: registerTrial,
@@ -53,12 +88,17 @@ function TrialSetup() {
   const inputCls =
     "w-full border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30";
 
+  const pageTitle = isEditing ? "Edit Trial" : "Trial Setup";
+  const submitLabel = saveMutation.isPending ? "Saving…" : (isEditing ? "Save changes" : "Save trial");
+  const successMessage = isEditing ? "Changes saved" : "Trial saved";
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="text-3xl">Trial Setup</h1>
+      <h1 className="text-3xl">{pageTitle}</h1>
       <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-        Criteria are written in plain language so that each result can be quoted against the record
-        verbatim.
+        {isEditing
+          ? "Editing an existing trial. The Trial ID cannot be changed because it is the unique key for this trial; changing it would create a new trial instead of updating this one."
+          : "Criteria are written in plain language so that each result can be quoted against the record verbatim."}
       </p>
 
       <form
@@ -93,7 +133,13 @@ function TrialSetup() {
               onChange={(e) => setId(e.target.value)}
               placeholder="NCT00000000"
               className={`${inputCls} font-mono`}
+              disabled={isEditing}
             />
+            {isEditing && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Trial ID is read-only when editing — changing it would create a new trial instead of updating this one.
+              </p>
+            )}
           </div>
         </div>
 
@@ -193,11 +239,11 @@ function TrialSetup() {
             disabled={saveMutation.isPending}
             className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saveMutation.isPending ? "Saving…" : "Save trial"}
+            {submitLabel}
           </button>
           {saveMutation.isSuccess && (
             <p className="text-sm text-match">
-              Trial saved —{" "}
+              {successMessage} —{" "}
               <Link to="/" className="underline underline-offset-4">
                 run an assessment against it
               </Link>

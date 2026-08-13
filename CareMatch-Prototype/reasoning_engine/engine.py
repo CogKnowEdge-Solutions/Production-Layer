@@ -16,8 +16,18 @@ Note this is always a SUGGESTION. requires_coordinator_approval is hard-coded
 True in the schema itself (see schema.py) -- there is no code path that can
 produce an assessment that skips human review, even for a clean pass.
 
+Guardrails are enforced HERE, in the engine, not in the API layer:
+  - INPUT: check_patient_record() runs at the very start of assess_patient(),
+    before any LLM call. Because it lives here rather than in main.py, every
+    entry point (the HTTP API AND run_real_assessment.py directly) is
+    protected -- a rejected record never costs an AI call.
+  - OUTPUT: verify_evidence() runs in evaluate_single_rule() after every LLM
+    response, before the result is accepted. A quoted evidence string that
+    can't be found in the patient record is treated as a possible
+    hallucination and overridden to "unclear" rather than accepted as fact.
+
 The `call_llm` parameter is dependency injection: production code passes
-llm_client.call_real_llm, tests pass a fake that returns canned answers.
+llm_client.call_llm, tests pass a fake that returns canned answers.
 This lets us fully test the loop and aggregation logic without needing an
 API key.
 """
@@ -27,6 +37,7 @@ from typing import Callable
 
 from pydantic import ValidationError
 
+from guardrails import check_patient_record, verify_evidence
 from protocol import Protocol
 from schema import AssessmentResult, RuleResult
 
@@ -40,11 +51,28 @@ def evaluate_single_rule(rule, patient_record: str, call_llm: LLMCallable) -> Ru
     elapsed = time.monotonic() - start
 
     try:
+        status = raw["status"]
+        evidence = raw["evidence"]
+
+        # OUTPUT guardrail: verify the AI's quoted evidence actually appears
+        # in the patient record before accepting it. Skipped entirely when the
+        # status is already "unclear" (nothing to check). On a mismatch the
+        # evidence is replaced with the honest unverified message AND the
+        # status is forced to "unclear" -- a possibly-hallucinated quote must
+        # never be accepted as a fact in either direction.
+        verified = True
+        if status != "unclear":
+            evidence, verified = verify_evidence(
+                patient_record, evidence, rule.rule_id, rule.rule_text
+            )
+        if not verified:
+            status = "unclear"
+
         result = RuleResult(
             rule_id=rule.rule_id,
             rule_text=rule.rule_text,
-            status=raw["status"],
-            evidence=raw["evidence"],
+            status=status,
+            evidence=evidence,
         )
         print(f"done in {elapsed:.1f}s -> {result.status}")
         return result
@@ -90,6 +118,12 @@ def assess_patient(
     protocol: Protocol,
     call_llm: LLMCallable,
 ) -> AssessmentResult:
+    # INPUT guardrails: checked here, at the very start, before the per-rule
+    # loop and before ANY LLM call. Because this lives in the engine, both
+    # entry points (the HTTP API and run_real_assessment.py) are enforced --
+    # a rejected record costs zero AI calls by definition.
+    check_patient_record(patient_record)
+
     rule_results = [
         evaluate_single_rule(rule, patient_record, call_llm) for rule in protocol.rules
     ]

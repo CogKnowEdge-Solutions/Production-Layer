@@ -111,6 +111,18 @@ async function handle<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// DELETE endpoints return 204 with no body, so they get their own helper:
+// the error path still surfaces the real detail (e.g. a 409's exact
+// "N assessment(s) still reference it" message), but success doesn't try
+// to parse a body that doesn't exist.
+async function handleDelete(res: Response): Promise<void> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const detail = typeof body.detail === "string" ? body.detail : `Request failed (${res.status})`;
+    throw new ApiError(detail, res.status);
+  }
+}
+
 export async function listTrials(): Promise<Trial[]> {
   const res = await fetch(`${API_BASE}/trials`);
   return handle(res);
@@ -163,4 +175,18 @@ export async function recordDecision(
     body: JSON.stringify(input),
   });
   return handle(res);
+}
+
+export async function deleteTrial(trialId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/trials/${encodeURIComponent(trialId)}`, {
+    method: "DELETE",
+  });
+  return handleDelete(res);
+}
+
+export async function deleteAssessment(assessmentId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/assessments/${encodeURIComponent(assessmentId)}`, {
+    method: "DELETE",
+  });
+  return handleDelete(res);
 }

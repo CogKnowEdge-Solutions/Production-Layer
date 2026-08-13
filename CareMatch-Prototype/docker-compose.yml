@@ -8,14 +8,9 @@ services:
     volumes:
       - api_data:/app/api/data
     environment:
-      # "real" is the default so a client demo can NEVER silently run in
-      # free testing mode just because .env was forgotten or LLM_MODE was
-      # left unset. Without a key, real mode fails loudly (502), never
-      # quietly fakes a result.
-      LLM_MODE: ${LLM_MODE:-real}
-      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      # Real AI is the only mode -- every assessment makes a real LLM call.
+      # Without a key it fails loudly (502), never quietly fakes a result.
+      # Anthropic direct is the only provider.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}

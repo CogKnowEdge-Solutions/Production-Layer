@@ -2,7 +2,7 @@
 
 **An AI tool that helps hospital staff check if a patient qualifies for a clinical trial — and shows its work, every single time.**
 
-**New here?** See `setup_guide.md` for step-by-step setup instructions, and `seed_data.md` for copy-paste examples to try once it's running.
+**New here?** See [setup_guide.md](./setup_guide.md) for step-by-step setup instructions, and [seed_data.md](./seed_data.md) for copy-paste examples to try once it's running.
 
 ---
 
@@ -30,16 +30,16 @@
 
 ## Documentation Map
 
-Everything worth reading, and what to read it for. This file (`README.md`) is the technical overview; the four guides below take you from "nothing installed" to "I understand the whole project."
+Everything worth reading, and what to read it for. This file ([`README.md`](./README.md)) is the technical overview; the four guides below take you from "nothing installed" to "I understand the whole project."
 
 **For everyone — read in this order:**
 
 | Doc | Read it to |
 |---|---|
-| `setup_guide.md` | Get the app running, step by step, from a fresh computer. This is the only doc you need to start. |
-| `seed_data.md` | Type in exact values and confirm the app is actually working with your own eyes. |
-| `monitoring_guide.md` | Understand what Prometheus and Grafana are, and look at the app's health numbers yourself — click by click. |
-| `project_summary.md` | Get the whole story: what got built, what actually broke and got fixed, and the honest results. |
+| [`setup_guide.md`](./setup_guide.md) | Get the app running, step by step, from a fresh computer. This is the only doc you need to start. |
+| [`seed_data.md`](./seed_data.md) | Type in exact values and confirm the app is actually working with your own eyes. |
+| [`monitoring_guide.md`](./monitoring_guide.md) | Understand what Prometheus and Grafana are, and look at the app's health numbers yourself — click by click. |
+| [`project_summary.md`](./project_summary.md) | Get the whole story: what got built, what actually broke and got fixed, and the honest results. |
 
 > **Two similar-sounding terms, worth telling apart:** "Needs More Information" is what the AI suggests when it can't tell from the record alone (see the `suggested_status` field). "Needs More Review" is a separate action a coordinator can choose afterward, to flag an assessment for later follow-up. One comes from the AI, the other from a human — they are not the same thing.
 
@@ -47,10 +47,18 @@ Everything worth reading, and what to read it for. This file (`README.md`) is th
 
 | Doc | Read it to |
 |---|---|
-| `dashboard/README.md` | Developer notes for the dashboard — how to run it and what's built. |
-| `dashboard/src/routes/README.md` | Internal note on how the dashboard's file-based routing works. |
+| [`dashboard/README.md`](./dashboard/README.md) | Developer notes for the dashboard — how to run it and what's built. |
+| [`dashboard/src/routes/README.md`](./dashboard/src/routes/README.md) | Internal note on how the dashboard's file-based routing works. |
 
-The suggested path for a newcomer is simple: `setup_guide.md` → `seed_data.md` → `monitoring_guide.md` → `project_summary.md`.
+**The rest of the repository (this folder is one sub-project of `Production-Layer`):**
+
+| Doc | Read it to |
+|---|---|
+| [`../README.md`](../README.md) | The `Production-Layer` monorepo overview — the repository that holds this folder. |
+| [`../CareMatch-SDD/README.md`](../CareMatch-SDD/README.md) | The other sub-project: a larger spec-driven CareMatch API (FHIR, JWT auth, AI agent team). |
+| [`../CareMatch-SDD/SPECKIT_WORKFLOW.md`](../CareMatch-SDD/SPECKIT_WORKFLOW.md) | How the SDD sub-project is developed with GitHub Spec Kit. |
+
+The suggested path for a newcomer is simple: [setup_guide.md](./setup_guide.md) → [seed_data.md](./seed_data.md) → [monitoring_guide.md](./monitoring_guide.md) → [project_summary.md](./project_summary.md).
 
 ---
 
@@ -295,7 +303,7 @@ There are two different `.env` files depending on how you're running things:
 
 ## Monitoring, Logging & Tracing
 
-CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question. **Want to look at these numbers yourself, click by click? See `monitoring_guide.md`.**
+CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question. **Want to look at these numbers yourself, click by click? See [monitoring_guide.md](./monitoring_guide.md).**
 
 ### 1. Prometheus + Grafana — "Is the system healthy?"
 Tracks system-wide numbers over time: how many assessments have run, how long reasoning takes, how often coordinators accept vs. deny, and standard web traffic stats. Prometheus collects the numbers (configured in `prometheus_config.yml`, which also watches its own health); Grafana turns them into charts. Good for spotting trends — "did things slow down this week?" — not for looking at one specific event.
@@ -348,7 +356,7 @@ Building this surfaced some genuine bugs — the useful kind, found and fixed be
 4. **A leftover test service was quietly stealing web traffic meant for the real system**, because both were using the same computer port. Fixed by removing the old service entirely and building monitoring directly into the real system instead.
 5. **The app forgot everything every time it restarted.** All trials and assessments lived only in memory. Fixed by adding a real SQLite database — tested by actually killing the running server process and confirming the data survived.
 
-*(Full details of each issue, exactly what caused it and how it was proven fixed, are in `project_summary.md`.)*
+*(Full details of each issue, exactly what caused it and how it was proven fixed, are in [project_summary.md](./project_summary.md).)*
 
 ---
 

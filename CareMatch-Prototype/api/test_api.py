@@ -13,6 +13,7 @@ half of the "survives a hard kill" proof.
 """
 
 import os
+import re
 import tempfile
 from unittest import mock
 
@@ -458,7 +459,7 @@ def test_data_persists_across_a_fresh_database_connection():
     """The storage-layer half of the persistence proof: everything the API
     wrote must be readable back through a brand-new sqlite3 connection --
     exactly what a freshly-started process would do. This exercises the
-    full join across trials -> rules and assessments -> rule_results ->
+    full join across trials -> rules -> assessments -> rule_results ->
     decisions, not just one table in isolation."""
     import sqlite3
 
@@ -515,3 +516,69 @@ def test_data_persists_across_a_fresh_database_connection():
         assert decision[0] == "accepted"
     finally:
         conn.close()
+
+
+def test_assess_with_ssn_in_record_is_rejected_422_without_leaking():
+    """An INPUT guardrail firing must come back as a clean 422 (well-formed
+    request, rejected CONTENT), never a 500 -- and the error response must
+    never echo the matched PII back to the caller."""
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-GUARD-1",
+            "trial_name": "Guardrail Trial",
+            "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
+        },
+    )
+    fake_ssn = "123-45-6789"
+    r = client.post(
+        "/assess",
+        json={
+            "trial_id": "T-GUARD-1",
+            "patient_id": "P-1",
+            "patient_record": f"Insurance card on file lists SSN {fake_ssn}.",
+        },
+    )
+    assert r.status_code == 422  # NOT 500
+    assert "possible ssn" in r.json()["detail"].lower()
+    assert fake_ssn not in r.text  # the error response must not leak the value
+
+    # The input_pii_rejected_total counter must actually fire, not just exist.
+    metrics_text = client.get("/metrics").text
+    assert re.search(r"input_pii_rejected_total(_total)?\s+1\.0", metrics_text)
+
+
+def test_hallucinated_evidence_is_overridden_to_unclear_and_counted():
+    """OUTPUT guardrail end to end through the API: when the LLM quotes
+    evidence that is NOT in the patient record, the saved assessment must
+    come out as "unclear" with the honest message -- and the
+    hallucinated_evidence_caught_total counter must increment."""
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-HALL-1",
+            "trial_name": "Hallucination Trial",
+            "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
+        },
+    )
+
+    def hallucinating_llm(rule_text, patient_record, category):
+        return {"status": "matches", "evidence": "this quote is not in the record"}
+
+    with mock.patch("llm_client.call_llm", side_effect=hallucinating_llm):
+        r = client.post(
+            "/assess",
+            json={
+                "trial_id": "T-HALL-1",
+                "patient_id": "P-1",
+                "patient_record": "Patient has hypertension.",
+            },
+        )
+    assert r.status_code == 201
+    rule_result = r.json()["assessment"]["rule_results"][0]
+    assert rule_result["status"] == "unclear"  # status forced to unclear
+    assert "could not be verified" in rule_result["evidence"]
+
+    # The hallucinated_evidence_caught_total counter must actually fire.
+    metrics_text = client.get("/metrics").text
+    assert re.search(r"hallucinated_evidence_caught_total(_total)?\s+1\.0", metrics_text)

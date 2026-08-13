@@ -46,6 +46,7 @@ from engine import assess_patient  # noqa: E402
 from protocol import Protocol, Rule  # noqa: E402
 from schema import AssessmentResult, RuleResult, RULE_ID_PATTERN, SuggestedStatus  # noqa: E402
 import llm_client  # noqa: E402
+import guardrails  # noqa: E402
 
 app = FastAPI(title="CareMatch API", description="Phase 2 -- the doorway into the reasoning engine")
 
@@ -78,6 +79,32 @@ trials_registered_total = Counter(
     "trials_registered_total",
     "Total trials registered via POST /trials",
 )
+
+# Guardrail metrics: how often each input guardrail actually rejects a record
+# (incremented at the point the violation reaches the API layer), plus how
+# often the output guardrail catches a hallucinated evidence quote.
+input_length_rejected_total = Counter(
+    "input_length_rejected_total",
+    "Patient records rejected by the input length limit before any AI call",
+)
+input_pii_rejected_total = Counter(
+    "input_pii_rejected_total",
+    "Patient records rejected by PII pattern scanning (SSN/email/phone) before any AI call",
+)
+input_injection_rejected_total = Counter(
+    "input_injection_rejected_total",
+    "Patient records rejected by injection-pattern scanning before any AI call",
+)
+hallucinated_evidence_caught_total = Counter(
+    "hallucinated_evidence_caught_total",
+    "Rule results where the AI's quoted evidence could not be verified against the patient record and was overridden to unclear",
+)
+
+# Wire the output guardrail's override signal (it fires deep inside
+# evaluate_single_rule, where the engine has no Prometheus dependency) to
+# this counter. When this API is running, every caught hallucination counts;
+# run_real_assessment.py still logs the override, just without the counter.
+guardrails.set_hallucinated_evidence_hook(hallucinated_evidence_caught_total.inc)
 
 # Without this, the browser blocks every request the dashboard makes to
 # this API by default (CORS) -- it's not optional for a browser-based
@@ -330,6 +357,19 @@ def assess(body: AssessRequest):
             protocol=protocol,
             call_llm=llm_client.call_llm,
         )
+    except guardrails.GuardrailViolation as exc:
+        # An INPUT guardrail fired: assess_patient checks the record at its
+        # very start, so this was rejected before any AI call -- no cost was
+        # incurred. 422 (well-formed request whose CONTENT is rejected), not
+        # 500. The detail message is safe to return: guardrails never echo
+        # the matched value back, so nothing sensitive leaks to the caller.
+        if exc.check == guardrails.CHECK_LENGTH:
+            input_length_rejected_total.inc()
+        elif exc.check == guardrails.CHECK_PII:
+            input_pii_rejected_total.inc()
+        elif exc.check == guardrails.CHECK_INJECTION:
+            input_injection_rejected_total.inc()
+        raise HTTPException(status_code=422, detail=exc.message) from exc
     except llm_client.LLMError as exc:
         raise HTTPException(status_code=502, detail=f"LLM error: {exc}") from exc
     finally:

@@ -6,6 +6,7 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useLocation,
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
@@ -109,6 +110,45 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+// Client-side nav component using useLocation for reliable active state
+// Uses a FILLED PILL BACKGROUND with bright white contrast for dark header visibility
+function Nav() {
+  const location = useLocation();
+
+  const NAV_LINKS = [
+    { to: "/", label: "New Assessment", exact: true },
+    { to: "/review", label: "Assessment Review", exact: false },
+    { to: "/trial-setup", label: "Trial Setup", exact: false },
+    { to: "/trials", label: "Trials", exact: false },
+    { to: "/history", label: "Assessment History", exact: false },
+  ];
+
+  return (
+    <nav className="flex items-center gap-2" aria-label="Main navigation">
+      {NAV_LINKS.map((item) => {
+        const isActive = item.exact
+          ? location.pathname === item.to
+          : location.pathname.startsWith(item.to);
+        return (
+          <Link
+            key={item.to}
+            to={item.to}
+            className={`
+              relative px-3 py-1.5 text-sm font-medium transition-all duration-150
+              rounded-md
+              ${isActive
+                ? "bg-white text-structure font-semibold shadow-lg shadow-white/10"
+                : "text-structure-foreground/70 hover:text-white hover:bg-white/10"}
+            `}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
@@ -123,13 +163,6 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-const NAV = [
-  { to: "/", label: "New Assessment" },
-  { to: "/review", label: "Assessment Review" },
-  { to: "/trial-setup", label: "Trial Setup" },
-  { to: "/trials", label: "Trials" },
-  { to: "/history", label: "Assessment History" },
-] as const;
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
@@ -138,27 +171,13 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <header className="border-b border-structure/25 bg-structure">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <Link to="/" className="flex items-baseline gap-3">
+          <Link to="/" className="flex items-baseline gap-3" aria-label="CareMatch home">
             <span className="font-serif text-lg font-semibold text-structure-foreground">CareMatch</span>
             <span className="font-mono text-[0.65rem] uppercase tracking-widest text-structure-foreground/60">
               Eligibility Review
             </span>
           </Link>
-          <nav className="flex gap-6">
-            {NAV.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                activeOptions={{ exact: item.to === "/" }}
-                className="border-b-2 border-transparent pb-0.5 text-sm text-structure-foreground/70 transition-colors hover:text-structure-foreground"
-                activeProps={{
-                  className: "border-b-2 border-primary pb-0.5 text-sm text-structure-foreground",
-                }}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <Nav />
         </div>
       </header>
       <main>

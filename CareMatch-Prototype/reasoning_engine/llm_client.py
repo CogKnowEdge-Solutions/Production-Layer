@@ -10,13 +10,8 @@ The LLM only judges status + evidence for the one rule we hand it. This
 removes an entire class of bugs where the model could typo or invent a
 rule_id.
 
-Supports TWO providers, switchable with one line in .env (LLM_PROVIDER):
-  - "openrouter" (default) -- works with free models, good for testing
-    without paying for anything
-  - "anthropic" -- calls Anthropic directly, once you have your own key
-    from console.anthropic.com
-
-No code changes needed to switch -- just change LLM_PROVIDER in .env.
+Calls Anthropic directly. You need your own key from console.anthropic.com
+(ANTHROPIC_API_KEY); ANTHROPIC_MODEL optionally picks a specific model.
 
 HARNESS NOTE -- prompt injection defense: the patient record is untrusted
 free text (it could come from a real medical record with unusual content,
@@ -76,8 +71,7 @@ CATEGORY_EXPLANATIONS = {
     ),
 }
 
-# Defaults for each provider -- overridable via .env without touching code.
-DEFAULT_OPENROUTER_MODEL = "openai/gpt-oss-20b:free"
+# Defaults -- overridable via .env without touching code.
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"  # cheap, fast, reliable
 
 
@@ -107,18 +101,16 @@ _token_totals = {"input": 0, "output": 0}
 def _print_token_usage(response) -> None:
     """
     Harness note: cost visibility matters, especially given how much this
-    project has been built around a tight budget. Different providers
-    report usage differently (Anthropic: input_tokens/output_tokens,
-    OpenAI-compatible/OpenRouter: prompt_tokens/completion_tokens), and
-    some models via OpenRouter don't report it at all -- handle all of
-    that defensively rather than assuming one shape.
+    project has been built around a tight budget. Anthropic reports usage as
+    input_tokens/output_tokens -- read them defensively rather than assuming
+    one shape.
     """
     usage = getattr(response, "usage", None)
     if usage is None:
         return
 
-    input_tokens = getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", None)
-    output_tokens = getattr(usage, "output_tokens", None) or getattr(usage, "completion_tokens", None)
+    input_tokens = getattr(usage, "input_tokens", None)
+    output_tokens = getattr(usage, "output_tokens", None)
 
     if input_tokens is None and output_tokens is None:
         return
@@ -166,34 +158,6 @@ def _extract_json_object(text: str) -> dict:
     raise json.JSONDecodeError("No valid JSON object found anywhere in response", text, 0)
 
 
-def _one_attempt_openrouter(prompt: str) -> str:
-    """One attempt via OpenRouter. Raises on any failure; caller retries."""
-    from openai import OpenAI
-
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise LLMError(
-            "OPENROUTER_API_KEY is not set. Add it to your .env file, or "
-            "switch LLM_PROVIDER=anthropic if you have an Anthropic key instead."
-        )
-    model = os.environ.get("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
-
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key, timeout=45.0)
-    response = client.chat.completions.create(
-        model=model,
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    if not response.choices:
-        error_detail = getattr(response, "error", None)
-        raise RuntimeError(
-            f"Model returned no choices (likely overloaded/unavailable on the "
-            f"free tier). Detail: {error_detail}"
-        )
-    _print_token_usage(response)
-    return response.choices[0].message.content.strip()
-
-
 def _one_attempt_anthropic(prompt: str) -> str:
     """One attempt via direct Anthropic API. Raises on any failure; caller retries."""
     import anthropic
@@ -216,36 +180,30 @@ def _one_attempt_anthropic(prompt: str) -> str:
     return response.content[0].text.strip()
 
 
-def call_real_llm(rule_text: str, patient_record: str, category: str) -> dict:
+def call_llm(rule_text: str, patient_record: str, category: str) -> dict:
     """
-    The real path. Reads LLM_PROVIDER from .env to decide whether to call
-    OpenRouter (default, works with free models) or Anthropic directly
-    (once you have your own key). Same retry + JSON-extraction logic
-    applies to both -- only the actual API call differs.
+    The real path: calls Anthropic directly, once you have your own key
+    (ANTHROPIC_API_KEY). Same retry + JSON-extraction logic as always.
     """
-    provider = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-    if provider not in ("openrouter", "anthropic"):
-        raise LLMError(f"Unknown LLM_PROVIDER '{provider}' -- use 'openrouter' or 'anthropic'")
-
     prompt = PROMPT_TEMPLATE.format(
         rule_text=rule_text,
         patient_record=patient_record,
         category_upper=category.upper(),
         category_explanation=CATEGORY_EXPLANATIONS[category],
     )
-    attempt_fn = _one_attempt_openrouter if provider == "openrouter" else _one_attempt_anthropic
+    attempt_fn = _one_attempt_anthropic
 
     last_error = None
-    max_attempts = 5  # free-tier models especially need more patience
+    max_attempts = 5  # models especially need more patience
     for attempt in range(1, max_attempts + 1):
         try:
             raw_text = attempt_fn(prompt)
             break
         except LLMError:
-            # Config problems (missing/wrong key, bad provider name) are
-            # permanent, not transient -- retrying can never fix a key that
-            # doesn't exist. Fail immediately instead of wasting up to 30+
-            # seconds retrying something that will never succeed.
+            # Config problems (missing/wrong key) are permanent, not
+            # transient -- retrying can never fix a key that doesn't exist.
+            # Fail immediately instead of wasting up to 30+ seconds
+            # retrying something that will never succeed.
             raise
         except Exception as exc:
             if _is_permanent_error(exc):
@@ -253,19 +211,19 @@ def call_real_llm(rule_text: str, patient_record: str, category: str) -> dict:
                 # permanent. Same reasoning as above: don't waste time
                 # retrying something that structurally cannot succeed.
                 raise LLMError(
-                    f"Permanent error via {provider} (not retrying): {exc}"
+                    f"Permanent error via anthropic (not retrying): {exc}"
                 ) from exc
             last_error = exc
             if attempt < max_attempts:
                 wait = min(attempt * 3, 15)
                 print(
-                    f"    (hiccup on attempt {attempt}/{max_attempts} via {provider}: "
+                    f"    (hiccup on attempt {attempt}/{max_attempts} via anthropic: "
                     f"{exc.__class__.__name__}: {exc} -- retrying in {wait}s)"
                 )
                 time.sleep(wait)
     else:
         raise LLMError(
-            f"Failed after {max_attempts} attempts via {provider}. Last error: {last_error}"
+            f"Failed after {max_attempts} attempts via anthropic. Last error: {last_error}"
         ) from last_error
 
     if raw_text.startswith("```"):
@@ -283,18 +241,18 @@ def call_real_llm(rule_text: str, patient_record: str, category: str) -> dict:
 
 
 # ---- LangSmith tracing (senior-review step B) ----
-# call_real_llm is the one function we want visible as a trace in LangSmith:
+# call_llm is the one function we want visible as a trace in LangSmith:
 # each real LLM call becomes a run, so an assessment's reasoning is auditable
 # and evaluable after the fact. We wrap it AFTER definition so the decorator
-# applies to the exact object main.py resolves via llm_client.call_real_llm.
+# applies to the exact object main.py resolves via llm_client.call_llm.
 # Whether traces are actually SENT is controlled by LANGSMITH_TRACING in
 # .env / docker-compose -- the SDK reads that env var itself at runtime.
 # Wrapping here is purely what makes the call traceable in the first place.
 try:
     from langsmith import traceable
 
-    call_real_llm = traceable(name="call_real_llm")(call_real_llm)
-    print("    [langsmith] tracing enabled -- call_real_llm wrapped with @traceable")
+    call_llm = traceable(name="call_llm")(call_llm)
+    print("    [langsmith] tracing enabled -- call_llm wrapped with @traceable")
 except ImportError:
     # langsmith is in requirements.txt, but if it's somehow absent this
     # must never break the real LLM path -- tracing is observability,

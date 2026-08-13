@@ -85,7 +85,7 @@ function NewAssessment() {
         </p>
       )}
 
-      {trialsQuery.data && trialsQuery.data.length > 0 && (
+      {trialsQuery.data && trialsQuery.data.length > 0 && !assessMutation.isPending && (
         <form
           className="mt-10 space-y-7 border border-border bg-card p-7"
           onSubmit={(e) => {
@@ -146,17 +146,36 @@ function NewAssessment() {
 
           <div className="flex items-center justify-between border-t border-border pt-6">
             <p className="text-xs text-muted-foreground">
-              {assessMutation.isPending ? "Running eligibility review…" : "Connected to the CareMatch API."}
+              Connected to the CareMatch API.
             </p>
             <button
               type="submit"
-              disabled={assessMutation.isPending}
-              className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure focus:outline-none focus:ring-2 focus:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60"
+              className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure focus:outline-none focus:ring-2 focus:ring-ring/40"
             >
-              {assessMutation.isPending ? "Running…" : "Run eligibility review"}
+              Run eligibility review
             </button>
           </div>
         </form>
+      )}
+
+      {assessMutation.isPending && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mt-10 flex flex-col items-center gap-5 rounded-md border border-border bg-card px-7 py-14 text-center"
+        >
+          <div
+            aria-hidden="true"
+            className="h-12 w-12 animate-spin rounded-full border-4 border-primary/20 border-t-primary"
+          />
+          <div>
+            <p className="text-lg font-medium text-structure">Getting the assessment…</p>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Consulting the LLM on each criterion in the trial protocol, one rule at a time.
+              This usually takes a few seconds.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

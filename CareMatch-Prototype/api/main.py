@@ -8,7 +8,7 @@ longer loses anything (that's proven by a real kill-and-restart test).
 
 Real AI only: every assessment always goes through Phase 1's llm_client
 and makes an actual LLM call. There is no test-mode toggle in this code --
-tests substitute a mock for llm_client.call_real_llm from the test file
+tests substitute a mock for llm_client.call_llm from the test file
 itself, so the application contains zero knowledge that the substitution
 is happening.
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -284,6 +284,31 @@ def get_trial(trial_id: str):
     return _protocol_from_row(row)
 
 
+@app.delete("/trials/{trial_id}", status_code=204)
+def delete_trial(trial_id: str):
+    """Delete a trial, but ONLY when no assessment references it. The audit
+    trail is this project's whole reason to exist, so deleting a trial that
+    historical assessments point at is refused with a 409 naming exactly how
+    many assessments are blocking it -- the coordinator can decide to remove
+    those assessments first, never silently. When it does proceed, the
+    trial's rules cascade away via the schema's ON DELETE CASCADE."""
+    if db.get_trial(trial_id) is None:
+        raise HTTPException(status_code=404, detail=f"No trial registered with id '{trial_id}'")
+    blocking = db.count_assessments_for_trial(trial_id)
+    if blocking > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete trial '{trial_id}': {blocking} assessment(s) "
+                "still reference it. Deleting this trial would orphan that "
+                "historical assessment evidence, so deletion is blocked until "
+                "those assessments are removed first."
+            ),
+        )
+    db.delete_trial(trial_id)
+    return Response(status_code=204)
+
+
 @app.post("/assess", response_model=AssessmentRecord, status_code=201)
 def assess(body: AssessRequest):
     trial_row = db.get_trial(body.trial_id)
@@ -303,7 +328,7 @@ def assess(body: AssessRequest):
             patient_id=body.patient_id,
             patient_record=body.patient_record,
             protocol=protocol,
-            call_llm=llm_client.call_real_llm,
+            call_llm=llm_client.call_llm,
         )
     except llm_client.LLMError as exc:
         raise HTTPException(status_code=502, detail=f"LLM error: {exc}") from exc
@@ -317,11 +342,9 @@ def assess(body: AssessRequest):
     # Traceability: record exactly which provider/model actually produced
     # this assessment, resolved the same way llm_client itself resolves it,
     # so this is never guessed or out of sync with what really ran.
-    provider_used = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-    if provider_used == "anthropic":
-        model_used = os.environ.get("ANTHROPIC_MODEL", llm_client.DEFAULT_ANTHROPIC_MODEL)
-    else:
-        model_used = os.environ.get("OPENROUTER_MODEL", llm_client.DEFAULT_OPENROUTER_MODEL)
+    # Anthropic direct is the only provider.
+    provider_used = "anthropic"
+    model_used = os.environ.get("ANTHROPIC_MODEL", llm_client.DEFAULT_ANTHROPIC_MODEL)
 
     record = AssessmentRecord(
         assessment_id=str(uuid.uuid4()),
@@ -358,6 +381,21 @@ def get_assessment(assessment_id: str):
             status_code=404, detail=f"No assessment found with id '{assessment_id}'"
         )
     return _record_from_row(row)
+
+
+@app.delete("/assessments/{assessment_id}", status_code=204)
+def delete_assessment(assessment_id: str):
+    """Permanently delete an assessment. This removes real audit evidence
+    (the record AND, via ON DELETE CASCADE, its per-rule results and any
+    coordinator decision), so it 404s on an unknown id and the dashboard
+    wraps it in an explicit, un-dismissable-by-accident confirmation. The
+    API itself is deliberately blunt: it does what it's told, and the UI
+    owns the warning."""
+    if not db.delete_assessment(assessment_id):
+        raise HTTPException(
+            status_code=404, detail=f"No assessment found with id '{assessment_id}'"
+        )
+    return Response(status_code=204)
 
 
 @app.post("/assessments/{assessment_id}/decision", response_model=AssessmentRecord)

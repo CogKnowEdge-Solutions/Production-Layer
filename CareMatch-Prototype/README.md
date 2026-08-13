@@ -220,7 +220,7 @@ flowchart TD
 | Piece | What It's Built With | Why |
 |---|---|---|
 | Reasoning Engine | Python, Pydantic | Pydantic forces every AI answer to follow our exact required shape — an answer that doesn't fit gets rejected automatically |
-| AI Model Access | Anthropic Claude (direct) or OpenRouter | Two ways to reach an AI model, switchable with one setting, no code changes needed |
+| AI Model Access | Anthropic Claude (direct) | Every assessment calls Anthropic directly; model is switchable via one env var, no code changes needed |
 | API | FastAPI | Lightweight, fast, and automatically generates interactive docs |
 | Persistence | SQLite | A real, permanent database that needs no separate server — one file on disk. Trials, assessments, and decisions all survive a restart |
 | Dashboard | React + TanStack Start + Tailwind CSS | A modern, fast web app framework |
@@ -321,11 +321,8 @@ There are two different `.env` files depending on how you're running things:
 
 | Variable | What It Does | Required When |
 |---|---|---|
-| `LLM_PROVIDER` | Which AI service to use: `"anthropic"` or `"openrouter"` | Never — has a default |
-| `ANTHROPIC_API_KEY` | Your Anthropic key | Only if `LLM_PROVIDER=anthropic` |
+| `ANTHROPIC_API_KEY` | Your Anthropic key | Always — every assessment makes a real call to Anthropic directly |
 | `ANTHROPIC_MODEL` | Which Anthropic model to use | Never — has a default |
-| `OPENROUTER_API_KEY` | Your OpenRouter key | Only if `LLM_PROVIDER=openrouter` |
-| `OPENROUTER_MODEL` | Which model via OpenRouter | Never — has a default |
 | `LANGSMITH_TRACING` | `"true"` turns on permanent AI decision logging | Never — defaults to off |
 | `LANGSMITH_API_KEY` | Your LangSmith key | Only if `LANGSMITH_TRACING=true` |
 | `LANGSMITH_PROJECT` | Which LangSmith project traces go into | Never — has a default |

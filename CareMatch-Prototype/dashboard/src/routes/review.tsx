@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useBlocker, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   decisionDisplayLabel,
   getAssessment,
@@ -36,15 +36,35 @@ export const Route = createFileRoute("/review")({
 
 const DEFAULT_REASON = "";
 
+const LAST_ASSESSMENT_KEY = "carematch:lastAssessmentId";
+
 function Review() {
   const { id } = Route.useSearch();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  // Redirect to last viewed assessment if no id in URL and we have a saved one
+  useEffect(() => {
+    if (id === "") {
+      const savedId = localStorage.getItem(LAST_ASSESSMENT_KEY);
+      if (savedId) {
+        navigate({ to: "/review", search: { id: savedId } });
+      }
+    }
+  }, [id, navigate]);
 
   const assessmentQuery = useQuery({
     queryKey: ["assessment", id],
     queryFn: () => getAssessment(id),
     enabled: id !== "",
   });
+
+  // Save successful assessment load to localStorage
+  useEffect(() => {
+    if (id && assessmentQuery.data && !assessmentQuery.isLoading && !assessmentQuery.isError) {
+      localStorage.setItem(LAST_ASSESSMENT_KEY, id);
+    }
+  }, [id, assessmentQuery.data, assessmentQuery.isLoading, assessmentQuery.isError]);
 
   const [panel, setPanel] = useState<"deny" | "needs_more_review" | null>(null);
   const [reason, setReason] = useState(DEFAULT_REASON);
@@ -57,6 +77,39 @@ function Review() {
       setReason(DEFAULT_REASON);
     },
   });
+
+  const record = assessmentQuery.data;
+  const isUndecided = !!record && record.decision === null;
+
+  // Block navigation away while an undecided assessment is loaded. This is
+  // a confirmation gate, not an absolute block: window.confirm decides, and
+  // confirming "Leave" (OK) always lets the navigation proceed. Navigating
+  // within /review itself (e.g. the no-id redirect back to the saved id) is
+  // never blocked. enableBeforeUnload is off so the router never
+  // blanket-blocks unloads -- the dedicated handler below owns that.
+  useBlocker({
+    shouldBlockFn: ({ next }) => {
+      if (!isUndecided || next.pathname === "/review") return false;
+      const leave = window.confirm(
+        "You haven't recorded a decision on this assessment yet. Leave without deciding?",
+      );
+      return !leave;
+    },
+    enableBeforeUnload: false,
+  });
+
+  // Browser beforeunload handler for tab close/refresh while undecided.
+  useEffect(() => {
+    if (!isUndecided) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue =
+        "You haven't recorded a decision on this assessment yet. Leave without deciding?";
+      return e.returnValue;
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isUndecided]);
 
   if (id === "") {
     return (
@@ -80,7 +133,7 @@ function Review() {
     );
   }
 
-  if (assessmentQuery.isError || !assessmentQuery.data) {
+  if (assessmentQuery.isError || !record) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-12">
         <p className="border border-nomatch/40 bg-nomatch/8 p-4 text-sm text-nomatch">
@@ -90,8 +143,8 @@ function Review() {
     );
   }
 
-  const record = assessmentQuery.data;
   const a = record.assessment;
+
   const inclusion = a.rule_results.filter((r) => r.rule_id.startsWith("INC"));
   const exclusion = a.rule_results.filter((r) => r.rule_id.startsWith("EXC"));
 

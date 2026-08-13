@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { listTrials, type TrialRule } from "@/lib/api";
+import { listTrials, deleteTrial, ApiError, type TrialRule } from "@/lib/api";
 
 export const Route = createFileRoute("/trials")({
   head: () => ({
@@ -28,12 +28,37 @@ const CATEGORY_LABEL: Record<TrialRule["category"], string> = {
 };
 
 function Trials() {
+  const queryClient = useQueryClient();
   const trialsQuery = useQuery({
     queryKey: ["trials"],
     queryFn: listTrials,
   });
 
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDeleteTrial(trialId: string, trialName: string) {
+    const confirmed = window.confirm(
+      `Delete trial "${trialName}" (${trialId})? This permanently removes the trial and its eligibility criteria. This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    setDeletingId(trialId);
+    setDeleteError(null);
+    try {
+      await deleteTrial(trialId);
+      queryClient.invalidateQueries({ queryKey: ["trials"] });
+    } catch (err) {
+      // Surface the real API message -- for a 409 that's exactly how many
+      // assessments are blocking the deletion, which is the point of the
+      // safety rule. Never swallow it.
+      const message =
+        err instanceof ApiError ? err.message : "Couldn't delete this trial. Please try again.";
+      setDeleteError(message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
@@ -58,6 +83,7 @@ function Trials() {
           <p className="text-sm text-muted-foreground">No trials are registered yet.</p>
           <Link
             to="/trial-setup"
+            search={{ edit: "" }}
             className="mt-4 inline-block bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure"
           >
             Set up a trial
@@ -118,6 +144,30 @@ function Trials() {
                           <RuleLine key={r.rule_id} rule={r} />
                         ))}
                     </div>
+                  </div>
+                  <div className="pt-3 border-t border-border flex justify-end">
+                    {deleteError && expanded === t.trial_id && (
+                      <p className="mr-auto text-sm text-nomatch">
+                        {deleteError}
+                      </p>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteTrial(t.trial_id, t.trial_name);
+                      }}
+                      disabled={deletingId === t.trial_id}
+                      className="mr-4 text-sm text-nomatch underline underline-offset-4 hover:text-nomatch/80 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingId === t.trial_id ? "Deleting…" : "Delete"}
+                    </button>
+                    <Link
+                      to="/trial-setup"
+                      search={{ edit: t.trial_id }}
+                      className="text-sm text-primary underline underline-offset-4 hover:text-primary/80"
+                    >
+                      Edit this trial
+                    </Link>
                   </div>
                 </div>
               )}

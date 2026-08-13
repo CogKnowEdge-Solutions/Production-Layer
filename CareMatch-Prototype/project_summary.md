@@ -50,7 +50,7 @@ flowchart TD
     PROM --> GRAF[Grafana]
     API -- reads / writes --> DB[(SQLite database<br/>trials, assessments, decisions)]
     API --> ENG[Reasoning Engine<br/>Python]
-    ENG -- one call per rule --> LLM[LLM<br/>Anthropic Claude Haiku, via OpenRouter or direct]
+    ENG -- one call per rule --> LLM[LLM<br/>Anthropic Claude Haiku, direct]
     ENG -. every real AI call also logged .-> LS[LangSmith<br/>AI decision history]
 ```
 

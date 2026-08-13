@@ -1,7 +1,7 @@
 """
 Tests the API's HTTP layer: routing, validation, trial registration/lookup,
 and error handling. The real LLM call is replaced with a deterministic mock
-via unittest.mock.patch -- patching llm_client.call_real_llm from the test
+via unittest.mock.patch -- patching llm_client.call_llm from the test
 file, never inside main.py -- so these tests cost nothing, make zero network
 calls, and prove the plumbing works. Reasoning quality is proven separately
 against the real model, not in these tests.
@@ -31,12 +31,12 @@ MOCKED_LLM_RESPONSE = {"status": "unclear", "evidence": "mocked for testing"}
 
 @pytest.fixture(autouse=True)
 def _mock_real_llm():
-    """Stand in for llm_client.call_real_llm across the whole test file.
+    """Stand in for llm_client.call_llm across the whole test file.
     main.py contains zero knowledge of this substitution -- it always calls
-    llm_client.call_real_llm, and the tests simply point that module
+    llm_client.call_llm, and the tests simply point that module
     attribute at a deterministic fake, so no test ever makes a real paid
     API call."""
-    with mock.patch("llm_client.call_real_llm", return_value=MOCKED_LLM_RESPONSE):
+    with mock.patch("llm_client.call_llm", return_value=MOCKED_LLM_RESPONSE):
         yield
 
 

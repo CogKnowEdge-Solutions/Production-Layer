@@ -10,9 +10,7 @@ services:
     environment:
       # Real AI is the only mode -- every assessment makes a real LLM call.
       # Without a key it fails loudly (502), never quietly fakes a result.
-      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      # Anthropic direct is the only provider.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}

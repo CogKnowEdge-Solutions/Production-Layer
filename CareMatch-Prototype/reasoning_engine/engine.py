@@ -17,7 +17,7 @@ True in the schema itself (see schema.py) -- there is no code path that can
 produce an assessment that skips human review, even for a clean pass.
 
 The `call_llm` parameter is dependency injection: production code passes
-llm_client.call_real_llm, tests pass a fake that returns canned answers.
+llm_client.call_llm, tests pass a fake that returns canned answers.
 This lets us fully test the loop and aggregation logic without needing an
 API key.
 """

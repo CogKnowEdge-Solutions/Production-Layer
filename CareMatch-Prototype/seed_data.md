@@ -185,6 +185,8 @@ Now that all 5 patients have been assessed, confirm the app has actually stored 
 
 If anything on either page is missing or different from above, that's worth investigating — the app stores everything permanently, so what you ran should be right there.
 
+**Optional — clean up when you're done:** now that you've confirmed everything works, you can delete this test data with the Delete buttons on the **Assessment History** and **Trials** pages if you'd like a clean slate — entirely optional. The app works fine with this test data left in place too.
+
 ---
 
 ## What To Do If a Result Looks Wrong

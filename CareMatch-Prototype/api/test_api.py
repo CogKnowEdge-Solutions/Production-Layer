@@ -79,7 +79,7 @@ def test_assess_records_which_provider_and_model_were_used():
     )
     with mock.patch.dict(
         os.environ,
-        {"LLM_PROVIDER": "anthropic", "ANTHROPIC_MODEL": "claude-test-model"},
+        {"ANTHROPIC_MODEL": "claude-test-model"},
     ):
         r = client.post(
             "/assess",

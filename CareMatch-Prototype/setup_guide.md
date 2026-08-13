@@ -209,5 +209,8 @@ docker compose up -d
 → Something else on your computer is already using one of the ports (8000, 8080, or — Docker only — 9090, 3000). Close whatever that is, or ask for help changing the port.
 
 **Assessments fail with an error even though I added an API key**
-→ Docker: double-check the top-level `.env` has a valid `ANTHROPIC_API_KEY` (and that `LLM_PROVIDER` matches the kind of key you hold), then run `docker compose up -d --build` again.
+→ Docker: double-check the top-level `.env` has a valid `ANTHROPIC_API_KEY`, then run `docker compose up -d --build` again.
 → Manual setup: double-check `api/.env` (not the top-level one) has the same, then restart `uvicorn` (`Ctrl+C`, then run it again).
+
+**My assessment was rejected — "Possible SSN detected in patient record" (or similar)**
+→ CareMatch runs input guardrails before anything is sent to the AI, and if one fires, the API refuses the record with a clean error (HTTP 422) and a message like **"Possible SSN detected in patient record."**, **"Possible email address detected in patient record."**, **"Possible phone number detected in patient record."**, or **"Suspicious instructional content detected in patient record field."** — or a length message for records over 10,000 characters. The message deliberately never shows the exact text that triggered it. If a real patient record trips this, look inside the record you pasted for an SSN-format number, an email address, a phone number, or instruction-like wording (for example "ignore previous instructions"), remove it, and re-run. These checks are described in `monitoring_guide.md`.

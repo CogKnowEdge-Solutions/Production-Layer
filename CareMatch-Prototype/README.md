@@ -243,6 +243,8 @@ flowchart TD
 | GET | `/assessments` | List every assessment ever run, newest first (Assessment History view) |
 | GET | `/assessments/{assessment_id}` | Look up a past assessment |
 | POST | `/assessments/{assessment_id}/decision` | Record the coordinator's decision — Accept, Deny, or Needs More Review |
+| DELETE | `/assessments/{assessment_id}` | Permanently delete an assessment, its per-rule results, and any recorded decision (204; unknown id → 404) |
+| DELETE | `/trials/{trial_id}` | Delete a trial and its rulebook (204; refused with 409 while any assessments reference it) |
 
 Every response also includes an `X-Request-ID` header — a unique ID for that specific request, useful for tracing a problem through the logs later (see [Monitoring, Logging & Tracing](#monitoring-logging--tracing)).
 

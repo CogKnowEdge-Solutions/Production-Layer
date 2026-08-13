@@ -6,20 +6,34 @@ file, never inside main.py -- so these tests cost nothing, make zero network
 calls, and prove the plumbing works. Reasoning quality is proven separately
 against the real model, not in these tests.
 
-Also: since the API now persists to SQLite, tests run against a throwaway
-temp DB (never the real one), and one test proves the data really lands on
-disk by re-opening the file with a brand-new connection -- the storage-layer
-half of the "survives a hard kill" proof.
+Also: since the API now persists to Postgres, tests run against a throwaway
+schema (carematch_test) inside the SAME Supabase database -- never the real
+"public" schema. The schema is dropped and recreated before the session and
+dropped again afterwards, so repeated test runs can never collide with
+leftover rows, and no test data lingers after the suite finishes. One test
+proves the data really landed by re-opening the database with a brand-new
+connection -- the storage-layer half of the "survives a hard kill" proof.
 """
 
 import os
 import re
-import tempfile
 from unittest import mock
 
 import pytest
 
-os.environ["CAREMATCH_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "carematch-test.db")
+# Point the persistence layer at the throwaway test schema BEFORE main is
+# imported (db.py reads this at import time). Production tables in "public"
+# are never touched.
+TEST_DB_SCHEMA = "carematch_test"
+os.environ["CAREMATCH_DB_SCHEMA"] = TEST_DB_SCHEMA
+
+import db  # noqa: E402  (loads api/.env via dotenv before reading DATABASE_URL)
+
+assert db.DATABASE_URL, (
+    "DATABASE_URL is not set -- copy api/.env.example to api/.env (or export "
+    "DATABASE_URL) and fill in the real Postgres connection string before "
+    "running the API tests."
+)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -28,6 +42,21 @@ from main import app  # noqa: E402
 client = TestClient(app)
 
 MOCKED_LLM_RESPONSE = {"status": "unclear", "evidence": "mocked for testing"}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_test_schema():
+    """Run the whole suite against a throwaway Postgres schema, never the
+    real one. Drops + recreates the schema (and its five tables) before the
+    session, and drops it again afterwards -- so a repeated run starts clean
+    and leaves nothing behind in Supabase."""
+    with db._connect() as cur:
+        cur.execute(f'DROP SCHEMA IF EXISTS "{TEST_DB_SCHEMA}" CASCADE')
+        cur.execute(f'CREATE SCHEMA "{TEST_DB_SCHEMA}"')
+    db.init_db()
+    yield
+    with db._connect() as cur:
+        cur.execute(f'DROP SCHEMA IF EXISTS "{TEST_DB_SCHEMA}" CASCADE')
 
 
 @pytest.fixture(autouse=True)
@@ -381,11 +410,9 @@ def test_needs_more_review_can_be_changed_to_a_final_decision():
 
 def test_legacy_decision_values_still_load_without_crashing():
     """Decisions written before the 3-option redesign used "approved" /
-    "overridden". They are NOT migrated (plain TEXT in SQLite), but they
+    "overridden". They are NOT migrated (plain TEXT in Postgres), but they
     must still load and display through the API without a validation
     crash."""
-    import sqlite3
-
     import db
 
     client.post(
@@ -403,15 +430,11 @@ def test_legacy_decision_values_still_load_without_crashing():
     assessment_id = create_resp.json()["assessment_id"]
 
     # Simulate data written by the old system, straight into the DB.
-    conn = sqlite3.connect(db.DB_PATH)
-    try:
-        conn.execute(
-            "INSERT INTO decisions (assessment_id, decision, decision_reason) VALUES (?, ?, ?)",
+    with db._connect() as cur:
+        cur.execute(
+            "INSERT INTO decisions (assessment_id, decision, decision_reason) VALUES (%s, %s, %s)",
             (assessment_id, "approved", "Legacy approval"),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
     r = client.get(f"/assessments/{assessment_id}")
     assert r.status_code == 200  # must NOT 500
@@ -457,12 +480,10 @@ def test_invalid_rule_id_format_is_rejected_at_registration():
 
 def test_data_persists_across_a_fresh_database_connection():
     """The storage-layer half of the persistence proof: everything the API
-    wrote must be readable back through a brand-new sqlite3 connection --
+    wrote must be readable back through a brand-new Postgres connection --
     exactly what a freshly-started process would do. This exercises the
     full join across trials -> rules -> assessments -> rule_results ->
     decisions, not just one table in isolation."""
-    import sqlite3
-
     import db
 
     client.post(
@@ -483,39 +504,43 @@ def test_data_persists_across_a_fresh_database_connection():
     assessment_id = assess_resp.json()["assessment_id"]
     client.post(f"/assessments/{assessment_id}/decision", json={"decision": "accepted"})
 
-    # New connection to the SAME file -- no reference to anything main.py
-    # or the TestClient still holds in memory.
-    conn = sqlite3.connect(db.DB_PATH)
-    try:
-        trial = conn.execute("SELECT trial_id, trial_name FROM trials WHERE trial_id='T-PERSIST-1'").fetchone()
+    # Brand-new connection to the SAME database -- no reference to anything
+    # main.py or the TestClient still holds in memory.
+    with db._connect() as cur:
+        cur.execute(
+            "SELECT trial_id, trial_name FROM trials WHERE trial_id = %s", ("T-PERSIST-1",)
+        )
+        trial = cur.fetchone()
         assert trial is not None
-        assert trial[1] == "Persistent Trial"
+        assert trial["trial_name"] == "Persistent Trial"
 
-        rules = conn.execute("SELECT rule_id FROM rules WHERE trial_id='T-PERSIST-1'").fetchall()
-        assert {r[0] for r in rules} == {"INC-01", "EXC-01"}
+        cur.execute("SELECT rule_id FROM rules WHERE trial_id = %s", ("T-PERSIST-1",))
+        rules = cur.fetchall()
+        assert {r["rule_id"] for r in rules} == {"INC-01", "EXC-01"}
 
-        assessment = conn.execute(
-            "SELECT assessment_id, trial_id, patient_id FROM assessments WHERE assessment_id=?",
+        cur.execute(
+            "SELECT assessment_id, trial_id, patient_id FROM assessments WHERE assessment_id = %s",
             (assessment_id,),
-        ).fetchone()
+        )
+        assessment = cur.fetchone()
         assert assessment is not None
-        assert assessment[1] == "T-PERSIST-1"
-        assert assessment[2] == "P-1"
+        assert assessment["trial_id"] == "T-PERSIST-1"
+        assert assessment["patient_id"] == "P-1"
 
-        rule_results = conn.execute(
-            "SELECT rule_id, status FROM rule_results WHERE assessment_id=?",
+        cur.execute(
+            "SELECT rule_id, status FROM rule_results WHERE assessment_id = %s",
             (assessment_id,),
-        ).fetchall()
+        )
+        rule_results = cur.fetchall()
         assert len(rule_results) == 2
-        assert {rr[0] for rr in rule_results} == {"INC-01", "EXC-01"}
+        assert {rr["rule_id"] for rr in rule_results} == {"INC-01", "EXC-01"}
 
-        decision = conn.execute(
-            "SELECT decision FROM decisions WHERE assessment_id=?", (assessment_id,)
-        ).fetchone()
+        cur.execute(
+            "SELECT decision FROM decisions WHERE assessment_id = %s", (assessment_id,)
+        )
+        decision = cur.fetchone()
         assert decision is not None
-        assert decision[0] == "accepted"
-    finally:
-        conn.close()
+        assert decision["decision"] == "accepted"
 
 
 def test_assess_with_ssn_in_record_is_rejected_422_without_leaking():

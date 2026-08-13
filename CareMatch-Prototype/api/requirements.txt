@@ -1,9 +1,8 @@
-spaces
-gradio
 fastapi
 uvicorn
 pydantic
 python-dotenv
+psycopg2-binary
 anthropic
 httpx
 prometheus-client

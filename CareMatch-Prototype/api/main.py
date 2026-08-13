@@ -83,14 +83,23 @@ trials_registered_total = Counter(
 # frontend, even in local dev. Listing common local dev ports explicitly
 # rather than using "*", since that's clearer about what's actually
 # expected to talk to this API.
+#
+# For deployed frontends (e.g. a Vercel dashboard), pass a comma-separated
+# ALLOWED_ORIGINS env var to add origins on top of the local dev ones.
+_default_allowed_origins = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+_extra_origins = [
+    origin.strip()
+    for origin in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_default_allowed_origins + _extra_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -17,6 +17,7 @@
 - [Project Structure](#project-structure)
 - [Tech Stack](#tech-stack)
 - [The API](#the-api)
+- [Guardrails](#guardrails)
 - [Running It Yourself](#running-it-yourself)
 - [Environment Variables](#environment-variables)
 - [Monitoring, Logging & Tracing](#monitoring-logging--tracing)
@@ -259,6 +260,17 @@ A coordinator decision is one of three values: `accepted`, `denied`, or `needs_m
 }
 ```
 Notice: no confidence score, no flat "yes." Just a status, a quote, and a note that a human still needs to sign off.
+
+---
+
+## Guardrails
+
+The AI is never trusted blindly. Every assessment passes through two layers of safety checks (enforced in `reasoning_engine/guardrails.py`, wired into the API in `api/main.py`):
+
+- **Input guardrails** run *before* anything is sent to the AI, so a rejected record costs zero API credits: a 10,000-character length limit, PII pattern scanning (SSN-format numbers, email addresses, phone numbers), and injection-pattern scanning (instructional phrases like "ignore previous instructions"). A rejection is a clean **422** that never echoes the matched value — e.g. "Possible SSN detected in patient record."
+- **Output guardrail** runs after each AI answer: evidence the model quotes must actually appear in the patient record, or it's overridden to `unclear` rather than trusted as fact.
+
+Each guardrail has its own Prometheus counter (`input_length_rejected_total`, `input_pii_rejected_total`, `input_injection_rejected_total`, `hallucinated_evidence_caught_total`). See [monitoring_guide.md](./monitoring_guide.md) for the queries and [project_summary.md](./project_summary.md) for the full story, including the real false-positive fix.
 
 ---
 

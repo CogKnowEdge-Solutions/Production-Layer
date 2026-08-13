@@ -305,7 +305,8 @@ There are two different `.env` files depending on how you're running things:
 | `LANGSMITH_API_KEY` | Your LangSmith key | Only if `LANGSMITH_TRACING=true` |
 | `LANGSMITH_PROJECT` | Which LangSmith project traces go into | Never — has a default |
 | `LANGSMITH_WORKSPACE_ID` | Your LangSmith workspace ID | Only if tracing is on **and** your key is an org-scoped "Service" key (starts with `lsv2_sk_`) — LangSmith rejects requests without it in that case |
-| `CAREMATCH_DB_PATH` | Where the SQLite database file is stored | Never — has a sensible default location |
+| `DATABASE_URL` | Postgres connection string (Supabase direct connection). If your password contains special characters like `@`, percent-encode them (e.g. `@` → `%40`) | Always — the API persists everything to Postgres |
+| `CAREMATCH_DB_SCHEMA` | Schema to put all tables in | Never — defaults to `public` (the test suite uses a throwaway schema) |
 
 **Good to know:** a missing or misconfigured LangSmith key never breaks the app itself — tracing failures are silently logged, but every real feature keeps working normally either way.
 
@@ -340,7 +341,7 @@ cd api
 pytest test_api.py -v
 ```
 
-Both test suites are fully automated and cost nothing to run, since they never make a real call to an AI model, and never touch the real database.
+Both test suites are fully automated and cost nothing to run, since they never make a real call to an AI model. The API tests run against the real Supabase database but entirely inside a throwaway `carematch_test` schema — created fresh at the start and dropped again at the end, so real data in `public` is never touched and repeated runs never collide.
 
 ---
 

@@ -6,50 +6,34 @@ file, never inside main.py -- so these tests cost nothing, make zero network
 calls, and prove the plumbing works. Reasoning quality is proven separately
 against the real model, not in these tests.
 
-Also: since the API persists to Postgres, tests run against a throwaway
-test database (never the real one), and one test proves the data really
-landed by re-reading it over a brand-new psycopg2 connection -- the
-storage-layer half of the "survives a hard kill" proof.
-
-Unlike the old SQLite temp file, a Postgres test target cannot be
-conjured on demand: point TEST_DATABASE_URL at a disposable database.
-The default matches the local throwaway container:
-
-    docker run -d --name carematch-test-pg \\
-        -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=carematch_test \\
-        -p 55432:5432 postgres:16-alpine
+Also: since the API now persists to Postgres, tests run against a throwaway
+schema (carematch_test) inside the SAME Supabase database -- never the real
+"public" schema. The schema is dropped and recreated before the session and
+dropped again afterwards, so repeated test runs can never collide with
+leftover rows, and no test data lingers after the suite finishes. One test
+proves the data really landed by re-opening the database with a brand-new
+connection -- the storage-layer half of the "survives a hard kill" proof.
 """
 
 import os
 import re
 from unittest import mock
 
-import psycopg2
 import pytest
 
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:55432/carematch_test"
+# Point the persistence layer at the throwaway test schema BEFORE main is
+# imported (db.py reads this at import time). Production tables in "public"
+# are never touched.
+TEST_DB_SCHEMA = "carematch_test"
+os.environ["CAREMATCH_DB_SCHEMA"] = TEST_DB_SCHEMA
+
+import db  # noqa: E402  (loads api/.env via dotenv before reading DATABASE_URL)
+
+assert db.DATABASE_URL, (
+    "DATABASE_URL is not set -- copy api/.env.example to api/.env (or export "
+    "DATABASE_URL) and fill in the real Postgres connection string before "
+    "running the API tests."
 )
-
-# This suite DROPS the whole public schema. Pointing it at a Supabase
-# project would destroy real data, and the SQLite version's "it's just a
-# temp file" safety net no longer exists -- so refuse outright.
-if "supabase.co" in TEST_DATABASE_URL or "supabase.com" in TEST_DATABASE_URL:
-    raise RuntimeError(
-        "TEST_DATABASE_URL points at a Supabase host. These tests drop and "
-        "recreate the public schema and would destroy real data. Point it at "
-        "a disposable local Postgres instead."
-    )
-
-os.environ["DATABASE_URL"] = TEST_DATABASE_URL
-
-# Clean slate before main.py imports and calls db.init_db(), so every run
-# starts from an empty schema regardless of what the previous run left.
-_bootstrap = psycopg2.connect(TEST_DATABASE_URL)
-_bootstrap.autocommit = True
-with _bootstrap.cursor() as _cur:
-    _cur.execute("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;")
-_bootstrap.close()
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -58,6 +42,21 @@ from main import app  # noqa: E402
 client = TestClient(app)
 
 MOCKED_LLM_RESPONSE = {"status": "unclear", "evidence": "mocked for testing"}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_test_schema():
+    """Run the whole suite against a throwaway Postgres schema, never the
+    real one. Drops + recreates the schema (and its five tables) before the
+    session, and drops it again afterwards -- so a repeated run starts clean
+    and leaves nothing behind in Supabase."""
+    with db._connect() as cur:
+        cur.execute(f'DROP SCHEMA IF EXISTS "{TEST_DB_SCHEMA}" CASCADE')
+        cur.execute(f'CREATE SCHEMA "{TEST_DB_SCHEMA}"')
+    db.init_db()
+    yield
+    with db._connect() as cur:
+        cur.execute(f'DROP SCHEMA IF EXISTS "{TEST_DB_SCHEMA}" CASCADE')
 
 
 @pytest.fixture(autouse=True)
@@ -411,8 +410,8 @@ def test_needs_more_review_can_be_changed_to_a_final_decision():
 
 def test_legacy_decision_values_still_load_without_crashing():
     """Decisions written before the 3-option redesign used "approved" /
-    "overridden". They are NOT migrated (plain TEXT in Postgres too), but
-    they must still load and display through the API without a validation
+    "overridden". They are NOT migrated (plain TEXT in Postgres), but they
+    must still load and display through the API without a validation
     crash."""
     import db
 
@@ -431,16 +430,11 @@ def test_legacy_decision_values_still_load_without_crashing():
     assessment_id = create_resp.json()["assessment_id"]
 
     # Simulate data written by the old system, straight into the DB.
-    conn = psycopg2.connect(db.DATABASE_URL)
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO decisions (assessment_id, decision, decision_reason) VALUES (%s, %s, %s)",
-                (assessment_id, "approved", "Legacy approval"),
-            )
-        conn.commit()
-    finally:
-        conn.close()
+    with db._connect() as cur:
+        cur.execute(
+            "INSERT INTO decisions (assessment_id, decision, decision_reason) VALUES (%s, %s, %s)",
+            (assessment_id, "approved", "Legacy approval"),
+        )
 
     r = client.get(f"/assessments/{assessment_id}")
     assert r.status_code == 200  # must NOT 500
@@ -486,11 +480,10 @@ def test_invalid_rule_id_format_is_rejected_at_registration():
 
 def test_data_persists_across_a_fresh_database_connection():
     """The storage-layer half of the persistence proof: everything the API
-    wrote must be readable back through a brand-new psycopg2 connection,
-    opened outside db.py's pool -- exactly what a freshly-started process
-    would do. This exercises the full join across trials -> rules ->
-    assessments -> rule_results -> decisions, not just one table in
-    isolation."""
+    wrote must be readable back through a brand-new Postgres connection --
+    exactly what a freshly-started process would do. This exercises the
+    full join across trials -> rules -> assessments -> rule_results ->
+    decisions, not just one table in isolation."""
     import db
 
     client.post(
@@ -511,45 +504,43 @@ def test_data_persists_across_a_fresh_database_connection():
     assessment_id = assess_resp.json()["assessment_id"]
     client.post(f"/assessments/{assessment_id}/decision", json={"decision": "accepted"})
 
-    # New connection to the SAME database, opened directly rather than
-    # through db.py's pool -- no reference to anything main.py or the
-    # TestClient still holds in memory.
-    conn = psycopg2.connect(db.DATABASE_URL)
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT trial_id, trial_name FROM trials WHERE trial_id='T-PERSIST-1'")
-            trial = cur.fetchone()
-            assert trial is not None
-            assert trial[1] == "Persistent Trial"
+    # Brand-new connection to the SAME database -- no reference to anything
+    # main.py or the TestClient still holds in memory.
+    with db._connect() as cur:
+        cur.execute(
+            "SELECT trial_id, trial_name FROM trials WHERE trial_id = %s", ("T-PERSIST-1",)
+        )
+        trial = cur.fetchone()
+        assert trial is not None
+        assert trial["trial_name"] == "Persistent Trial"
 
-            cur.execute("SELECT rule_id FROM rules WHERE trial_id='T-PERSIST-1'")
-            assert {r[0] for r in cur.fetchall()} == {"INC-01", "EXC-01"}
+        cur.execute("SELECT rule_id FROM rules WHERE trial_id = %s", ("T-PERSIST-1",))
+        rules = cur.fetchall()
+        assert {r["rule_id"] for r in rules} == {"INC-01", "EXC-01"}
 
-            cur.execute(
-                "SELECT assessment_id, trial_id, patient_id FROM assessments WHERE assessment_id=%s",
-                (assessment_id,),
-            )
-            assessment = cur.fetchone()
-            assert assessment is not None
-            assert assessment[1] == "T-PERSIST-1"
-            assert assessment[2] == "P-1"
+        cur.execute(
+            "SELECT assessment_id, trial_id, patient_id FROM assessments WHERE assessment_id = %s",
+            (assessment_id,),
+        )
+        assessment = cur.fetchone()
+        assert assessment is not None
+        assert assessment["trial_id"] == "T-PERSIST-1"
+        assert assessment["patient_id"] == "P-1"
 
-            cur.execute(
-                "SELECT rule_id, status FROM rule_results WHERE assessment_id=%s",
-                (assessment_id,),
-            )
-            rule_results = cur.fetchall()
-            assert len(rule_results) == 2
-            assert {rr[0] for rr in rule_results} == {"INC-01", "EXC-01"}
+        cur.execute(
+            "SELECT rule_id, status FROM rule_results WHERE assessment_id = %s",
+            (assessment_id,),
+        )
+        rule_results = cur.fetchall()
+        assert len(rule_results) == 2
+        assert {rr["rule_id"] for rr in rule_results} == {"INC-01", "EXC-01"}
 
-            cur.execute(
-                "SELECT decision FROM decisions WHERE assessment_id=%s", (assessment_id,)
-            )
-            decision = cur.fetchone()
-            assert decision is not None
-            assert decision[0] == "accepted"
-    finally:
-        conn.close()
+        cur.execute(
+            "SELECT decision FROM decisions WHERE assessment_id = %s", (assessment_id,)
+        )
+        decision = cur.fetchone()
+        assert decision is not None
+        assert decision["decision"] == "accepted"
 
 
 def test_assess_with_ssn_in_record_is_rejected_422_without_leaking():

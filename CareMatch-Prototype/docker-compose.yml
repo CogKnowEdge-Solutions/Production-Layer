@@ -5,14 +5,17 @@ services:
       dockerfile: api/Dockerfile
     ports:
       - "8000:8000"
-    volumes:
-      - api_data:/app/api/data
     environment:
       # Real AI is the only mode -- every assessment makes a real LLM call.
       # Without a key it fails loudly (502), never quietly fakes a result.
       # Anthropic direct is the only provider.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      # Postgres persistence: data lives in Supabase, not on a local disk
+      # file, so there is no api_data volume anymore. DATABASE_URL is read
+      # from the root .env.
+      DATABASE_URL: ${DATABASE_URL:-}
+      CAREMATCH_DB_SCHEMA: ${CAREMATCH_DB_SCHEMA:-public}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
       LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
       LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-carematch-prototype}
@@ -58,6 +61,5 @@ services:
       - prometheus
 
 volumes:
-  api_data:
   prometheus_data:
   grafana_data:

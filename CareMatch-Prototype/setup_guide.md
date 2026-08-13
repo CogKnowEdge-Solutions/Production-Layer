@@ -121,7 +121,9 @@ pip install -r requirements.txt -r ../reasoning_engine/requirements.txt
 Every assessment makes a real AI call. Create a file named `.env` right here inside the `api` folder (not the top-level one — this backend reads its own local `.env`) with:
 ```
 ANTHROPIC_API_KEY=your-real-key-here
+DATABASE_URL=postgresql://postgres:your-real-password-here@db.your-project.supabase.co:5432/postgres
 ```
+(The API persists everything to the Supabase Postgres database it connects to with `DATABASE_URL`. If your password contains special characters like `@`, percent-encode them, e.g. `@` → `%40`.)
 
 Then start it:
 ```bash
@@ -199,7 +201,7 @@ docker compose up -d
 ```
 (No `--build` needed unless the code itself changed.)
 
-**If you used the manual (non-Docker) setup:** just close both terminal windows, or press `Ctrl+C` in each one. Your trial and assessment data is still safely saved in a file (`api/data/carematch.db`) and will be there next time you run `uvicorn main:app --reload` again.
+**If you used the manual (non-Docker) setup:** just close both terminal windows, or press `Ctrl+C` in each one. Your trial and assessment data is still safely saved in the Supabase Postgres database and will be there next time you run `uvicorn main:app --reload` again.
 
 ---
 

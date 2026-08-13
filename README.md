@@ -24,8 +24,7 @@ This repository aggregates sub-projects using `git subtree`. Each sub-project li
 
 ```
 Production-Layer/
-├── CareMatch-Prototype/   # Prototype application
-└── CareMatch-SDD/         # Spec-driven development implementation
+└── CareMatch-Prototype/   # Prototype application
 ```
 
 ## Getting Started

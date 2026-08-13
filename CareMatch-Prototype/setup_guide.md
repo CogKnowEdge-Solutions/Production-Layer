@@ -15,9 +15,18 @@ You need one thing installed: **Docker Desktop**. This is the only requirement �
 
 ## Step 1 — Get the Code
 
-If you haven't already, download or clone the project folder onto your computer. You should see folders like `api/`, `dashboard/`, `reasoning_engine/`, and a file called `docker-compose.yml` at the top level.
+CareMatch-Prototype lives inside the `Production-Layer` repository (a monorepo that holds more than one project). To fetch **only** this folder without the rest of the repo, use a "sparse checkout":
 
-Open a terminal (Command Prompt, PowerShell, or Terminal) and navigate into that top-level folder — the one containing `docker-compose.yml`.
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/CogKnowEdge-Solutions/Production-Layer.git
+cd Production-Layer
+git sparse-checkout set CareMatch-Prototype
+cd CareMatch-Prototype
+```
+
+That last `cd CareMatch-Prototype` is the folder you'll stay in for every later command in this guide. You should see folders like `api/`, `dashboard/`, `reasoning_engine/`, and a file called `docker-compose.yml` at the top level.
+
+> **Already have the project folder?** Skip the commands above and just open a terminal (Command Prompt, PowerShell, or Terminal) inside the folder that contains `docker-compose.yml`.
 
 ---
 

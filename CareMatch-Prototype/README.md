@@ -56,34 +56,11 @@ The suggested path for a newcomer is simple: `setup_guide.md` → `seed_data.md`
 
 ## Setup — Get It Running
 
-### 1. Clone (this folder only)
-
-CareMatch-Prototype lives in the `Production-Layer` monorepo. To fetch only
-this folder without the rest of the repo, use a sparse checkout:
-
-```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/CogKnowEdge-Solutions/Production-Layer.git
-cd Production-Layer
-git sparse-checkout set CareMatch-Prototype
-cd CareMatch-Prototype
-```
-
-### 2. Environment setup
-
-The only machine requirement is **Docker Desktop** (download from
-[docker.com](https://www.docker.com/products/docker-desktop/), install it, and
-leave it running in the background). Then copy the environment template and
-add your AI API key:
-
-```bash
-cp .env.example .env      # then set ANTHROPIC_API_KEY
-```
-
-### 3. Next steps
-
-From here, follow **[setup_guide.md](./setup_guide.md)** step by step — it
-covers starting everything, verifying it works, trying it out, and
-troubleshooting.
+Getting the app from a fresh computer to a running app — cloning the code,
+the one machine requirement (Docker Desktop), the API key, starting
+everything, verifying it works, and troubleshooting — all lives in
+**[setup_guide.md](./setup_guide.md)**. It's the only doc you need to start;
+this README is the technical overview for after it's running.
 
 ---
 
@@ -279,34 +256,13 @@ Notice: no confidence score, no flat "yes." Just a status, a quote, and a note t
 
 ## Running It Yourself
 
-**CareMatch always runs with real AI.** Before any client demo, confirm the top-level `.env` has a valid API key — a missing key fails loudly with a 502, never quietly. Every assessment makes a real, paid call to the AI model. See `setup_guide.md` for full step-by-step instructions.
+Step-by-step run instructions — Docker or manual, plus all the local URLs and
+the data-persistence details — are in **[setup_guide.md](./setup_guide.md)**.
 
-**Everything at once, with Docker (recommended):**
-```bash
-docker compose up -d --build
-```
-Then open:
-- Dashboard: `http://localhost:8080`
-- API docs: `http://localhost:8000/docs`
-- Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000`
-
-**Data persists across restarts** — running `docker compose down` will never wipe anything:
-- Trials, assessments, and coordinator decisions are saved in SQLite (`api/db.py`), stored in a Docker volume (`api_data`) — this has been tested by actually killing the running server process and confirming the data survives.
-- Prometheus and Grafana also store their data in named volumes (`carematch_prometheus_data`, `carematch_grafana_data`).
-
-**Running pieces separately (for development):**
-```bash
-# Backend
-cd api
-pip install -r requirements.txt
-uvicorn main:app --reload
-
-# Frontend, in a separate terminal
-cd dashboard
-npm install
-npm run dev
-```
+One thing to remember before any client demo: **CareMatch always runs with
+real AI.** Confirm the top-level `.env` has a valid `ANTHROPIC_API_KEY` — a
+missing key fails loudly with a 502, never quietly. Every assessment makes a
+real, paid call to the AI model.
 
 ---
 

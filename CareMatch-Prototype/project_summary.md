@@ -34,8 +34,8 @@ CareMatch is a lightweight reasoning layer, not a black box. It never gives a fl
 
 | Layer | What It Is | Status |
 |---|---|---|
-| **Reasoning engine** | Python core that walks a trial's rules one at a time against a patient record, calling an LLM per rule | ✅ Built, tested with a real LLM |
-| **API** | FastAPI doorway — register trials, run assessments, list assessment history, record coordinator decisions | ✅ Built, 18/18 tests passing |
+| **Reasoning engine** | Python core that walks a trial's rules one at a time against a patient record, calling an LLM per rule | ✅ Built, 29/29 tests passing, tested with a real LLM |
+| **API** | FastAPI doorway — register trials, run assessments, list assessment history, record coordinator decisions | ✅ Built, 20/20 tests passing |
 | **Dashboard** | React/TanStack Start UI — New Assessment, Assessment Review, Trial Setup, Trials, Assessment History | ✅ Built, wired to the real API, browser-tested |
 | **Docker** | All services containerized, one `docker-compose up` starts everything | ✅ 4 containers running together |
 | **Observability** | Prometheus + Grafana, built into the real API (not a separate toy service) | ✅ Real metrics, real dashboard |
@@ -50,7 +50,7 @@ flowchart TD
     PROM --> GRAF[Grafana]
     API -- reads / writes --> DB[(SQLite database<br/>trials, assessments, decisions)]
     API --> ENG[Reasoning Engine<br/>Python]
-    ENG -- one call per rule --> LLM[LLM<br/>Anthropic Claude Haiku, via OpenRouter or direct]
+    ENG -- one call per rule --> LLM[LLM<br/>Anthropic Claude Haiku, direct]
     ENG -. every real AI call also logged .-> LS[LangSmith<br/>AI decision history]
 ```
 
@@ -154,6 +154,37 @@ The dashboard gained a fourth page — **Trials** — which lists every register
 
 The dashboard gained a fifth page — **Assessment History** — which lists every assessment that has ever been run, newest first, one lightweight row each: patient ID, trial ID, the AI's suggested status, and the coordinator's decision (or "Undecided"). Clicking any row opens that assessment's full evidence and decision in the existing Review page — no duplicate detail view. The backend side is a `GET /assessments` endpoint backed by a `list_assessments()` query that deliberately returns the summary fields without the heavy per-rule results (those stay on the per-id endpoint). Covered by a test that creates four assessments — accepted, denied, needs-more-review, and one left undecided — and confirms all four appear with the correct fields.
 
+### Guardrails — the AI can't be trusted blindly
+
+The engine is wrapped in two layers of safety checks, enforced in `reasoning_engine/guardrails.py` and wired into the metrics in `api/main.py`:
+
+- **Input guardrails** run at the very start of `assess_patient()`, *before a single AI call* — so a rejected record costs zero API credits. Three checks: a length limit (records over 10,000 characters are refused), PII pattern scanning (SSN-format numbers, email addresses, and phone numbers), and injection-pattern scanning (instructional phrases like "ignore previous instructions"). A rejection comes back as a clean **422** with a message like "Possible SSN detected in patient record." — deliberately worded to **never echo the matched value** back to the caller, and counted in `input_length_rejected_total`, `input_pii_rejected_total`, or `input_injection_rejected_total`.
+- **Output guardrail** runs after each AI answer: `verify_evidence()` checks that the evidence the model quoted actually appears in the patient record (normalized comparison — lowercase + collapsed whitespace, substring, not semantic). A quote that can't be verified is overridden to `unclear` with an honest message ("Evidence could not be verified against the patient record"), so the model is never trusted with a possibly fabricated quote. Every override is counted in the `hallucinated_evidence_caught_total` metric.
+
+**The real false-positive story (worth telling):** the first version of the injection patterns falsely rejected genuine clinical documentation. The bare pattern `system\s*:` fired on completely normal notes — "Review of systems: Cardiovascular system: regular rate and rhythm." — and the phrase "from now on" fired on ordinary treatment plans ("From now on, the patient should take medication twice daily"). Both were found by probing with realistic clinical notes, then fixed deliberately: `system:` was narrowed so it only fires when an actual instruction-like phrase follows the colon ("System: ignore all previous instructions"), and "from now on" was removed entirely. Regression tests prove the trade-off held: the classic "System: ignore all previous instructions …" attack still fires, while "Review of systems" and "From now on, the patient should take medication twice daily" both pass.
+
+**Honest limit, stated in the code itself:** PII scanning is pattern-based mitigation, not comprehensive detection — it reliably catches fixed formats (SSN/email/phone) and cannot catch names, addresses, or free-form identifiers. It's a cheap first line of defense, not a guarantee.
+
+### Trial and assessment deletion — with a safety rule
+
+Both DELETE endpoints exist and are deliberately blunt. `DELETE /assessments/{id}` permanently removes an assessment — the record, its per-rule results, and any coordinator decision (via ON DELETE CASCADE) — returning `204`; an unknown id returns `404`. `DELETE /trials/{trial_id}` returns `204` when it proceeds, but a trial that still has assessments referencing it is refused with a **`409`** that says exactly how many assessments are blocking it. The reason is this project's whole point: historical assessment evidence is an audit trail, so a trial can't be deleted out from under it. The full sequence — delete a referenced trial → `409`, delete the referencing assessments → `204`, delete the trial → `204` — was verified live against the running API with curl, and the dashboard wraps assessment deletion in an explicit confirmation ("This permanently removes the record, its evidence, and any recorded decision. This cannot be undone.").
+
+### The nav contrast fix — what the first attempt got wrong
+
+A senior review found the active tab in the dashboard's top navigation was hard to see. The fix gives the active tab a filled white pill (`bg-white text-structure font-semibold`) so it stands out against the dark header, and every page renders exactly one `<nav>` element with a single active link. The first attempt was **visually broken** even though it passed its own code-level checks: the white pill was being covered by a dark background layer, making the active tab effectively invisible against the header. The real fix removed that unintended background so the pill shows through. The result was measured, not eyeballed — the active pill's contrast against the header came out at **11.18:1**, well above the 4.5:1 WCAG AA requirement.
+
+### Review persistence — the app remembers where you were
+
+The Review page saves the last-viewed assessment id to `localStorage` (`carematch:lastAssessmentId`) whenever an assessment loads successfully. Navigating to `/review` with no `?id=` in the URL silently redirects to the saved assessment instead of dumping the user on an empty screen. Verified in a live browser: load an assessment, navigate away, come back to the bare Review link, and the saved assessment reopens.
+
+### The decision gate — you can't walk away by accident
+
+While an undecided assessment is loaded, the Review page blocks navigation away with a confirmation dialog: "You haven't recorded a decision on this assessment yet. Leave without deciding?" Confirming "Leave" always lets the user go — the gate is a safeguard, not a trap. A matching `beforeunload` handler covers closing or refreshing the tab. This closes a real gap: without it, a coordinator could navigate away from an undecided assessment and silently lose their place.
+
+### OpenRouter removal — one provider, deliberately
+
+CareMatch now calls **Anthropic directly** and nothing else. The `LLM_PROVIDER` environment variable and all OpenRouter wiring were deleted when the second provider was removed; a repo-wide grep for `openrouter|OpenRouter|OPENROUTER` returns **0 matches** in `CareMatch-Prototype` (excluding `node_modules`, `.git`, `test-results`, `.output`, `__pycache__`). `llm_client.py`'s `call_llm` is the single, unambiguously named entry point — renamed from the earlier `call_real_llm` (grep confirms 0 remaining occurrences) — and wrapped with LangSmith tracing so every real call is auditable.
+
 ---
 
 ## What's Genuinely Left (Not Code)
@@ -172,6 +203,7 @@ Both of these need an actual organization adopting this system — they are not 
 ```mermaid
 flowchart TD
     ROOT[carematch/] --> RE[reasoning_engine/<br/>Phase 1 — core AI reasoning logic]
+    RE --> GR[guardrails.py<br/>Input + output safety checks around the AI calls]
     ROOT --> API[api/<br/>Phase 2 — FastAPI doorway + SQLite persistence + Prometheus metrics]
     ROOT --> DASH[dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials, Assessment History]
     ROOT --> EV[run_evaluation.py<br/>The 12-patient accuracy test script]

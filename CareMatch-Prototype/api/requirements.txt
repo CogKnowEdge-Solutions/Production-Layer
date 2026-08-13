@@ -2,7 +2,6 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
-openai
 anthropic
 httpx
 prometheus-client

@@ -2,7 +2,7 @@
 
 **An AI tool that helps hospital staff check if a patient qualifies for a clinical trial — and shows its work, every single time.**
 
-**New here?** See `setup_guide.md` for step-by-step setup instructions, and `seed_data.md` for copy-paste examples to try once it's running.
+**New here?** See [setup_guide.md](./setup_guide.md) for step-by-step setup instructions, and [seed_data.md](./seed_data.md) for copy-paste examples to try once it's running.
 
 ---
 
@@ -17,6 +17,7 @@
 - [Project Structure](#project-structure)
 - [Tech Stack](#tech-stack)
 - [The API](#the-api)
+- [Guardrails](#guardrails)
 - [Running It Yourself](#running-it-yourself)
 - [Environment Variables](#environment-variables)
 - [Monitoring, Logging & Tracing](#monitoring-logging--tracing)
@@ -30,16 +31,16 @@
 
 ## Documentation Map
 
-Everything worth reading, and what to read it for. This file (`README.md`) is the technical overview; the four guides below take you from "nothing installed" to "I understand the whole project."
+Everything worth reading, and what to read it for. This file ([`README.md`](./README.md)) is the technical overview; the four guides below take you from "nothing installed" to "I understand the whole project."
 
 **For everyone — read in this order:**
 
 | Doc | Read it to |
 |---|---|
-| `setup_guide.md` | Get the app running, step by step, from a fresh computer. This is the only doc you need to start. |
-| `seed_data.md` | Type in exact values and confirm the app is actually working with your own eyes. |
-| `monitoring_guide.md` | Understand what Prometheus and Grafana are, and look at the app's health numbers yourself — click by click. |
-| `project_summary.md` | Get the whole story: what got built, what actually broke and got fixed, and the honest results. |
+| [`setup_guide.md`](./setup_guide.md) | Get the app running, step by step, from a fresh computer. This is the only doc you need to start. |
+| [`seed_data.md`](./seed_data.md) | Type in exact values and confirm the app is actually working with your own eyes. |
+| [`monitoring_guide.md`](./monitoring_guide.md) | Understand what Prometheus and Grafana are, and look at the app's health numbers yourself — click by click. |
+| [`project_summary.md`](./project_summary.md) | Get the whole story: what got built, what actually broke and got fixed, and the honest results. |
 
 > **Two similar-sounding terms, worth telling apart:** "Needs More Information" is what the AI suggests when it can't tell from the record alone (see the `suggested_status` field). "Needs More Review" is a separate action a coordinator can choose afterward, to flag an assessment for later follow-up. One comes from the AI, the other from a human — they are not the same thing.
 
@@ -47,43 +48,28 @@ Everything worth reading, and what to read it for. This file (`README.md`) is th
 
 | Doc | Read it to |
 |---|---|
-| `dashboard/README.md` | Developer notes for the dashboard — how to run it and what's built. |
-| `dashboard/src/routes/README.md` | Internal note on how the dashboard's file-based routing works. |
+| [`dashboard/README.md`](./dashboard/README.md) | Developer notes for the dashboard — how to run it and what's built. |
+| [`dashboard/src/routes/README.md`](./dashboard/src/routes/README.md) | Internal note on how the dashboard's file-based routing works. |
 
-The suggested path for a newcomer is simple: `setup_guide.md` → `seed_data.md` → `monitoring_guide.md` → `project_summary.md`.
+**The rest of the repository (this folder is one sub-project of `Production-Layer`):**
+
+| Doc | Read it to |
+|---|---|
+| [`../README.md`](../README.md) | The `Production-Layer` monorepo overview — the repository that holds this folder. |
+| [`../CareMatch-SDD/README.md`](../CareMatch-SDD/README.md) | The other sub-project: a larger spec-driven CareMatch API (FHIR, JWT auth, AI agent team). |
+| [`../CareMatch-SDD/SPECKIT_WORKFLOW.md`](../CareMatch-SDD/SPECKIT_WORKFLOW.md) | How the SDD sub-project is developed with GitHub Spec Kit. |
+
+The suggested path for a newcomer is simple: [setup_guide.md](./setup_guide.md) → [seed_data.md](./seed_data.md) → [monitoring_guide.md](./monitoring_guide.md) → [project_summary.md](./project_summary.md).
 
 ---
 
 ## Setup — Get It Running
 
-### 1. Clone (this folder only)
-
-CareMatch-Prototype lives in the `Production-Layer` monorepo. To fetch only
-this folder without the rest of the repo, use a sparse checkout:
-
-```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/CogKnowEdge-Solutions/Production-Layer.git
-cd Production-Layer
-git sparse-checkout set CareMatch-Prototype
-cd CareMatch-Prototype
-```
-
-### 2. Environment setup
-
-The only machine requirement is **Docker Desktop** (download from
-[docker.com](https://www.docker.com/products/docker-desktop/), install it, and
-leave it running in the background). Then copy the environment template and
-add your AI API key:
-
-```bash
-cp .env.example .env      # then set LLM_MODE=real and ANTHROPIC_API_KEY
-```
-
-### 3. Next steps
-
-From here, follow **[setup_guide.md](./setup_guide.md)** step by step — it
-covers starting everything, verifying it works, trying it out, and
-troubleshooting.
+Getting the app from a fresh computer to a running app — cloning the code,
+the one machine requirement (Docker Desktop), the API key, starting
+everything, verifying it works, and troubleshooting — all lives in
+**[setup_guide.md](./setup_guide.md)**. It's the only doc you need to start;
+this README is the technical overview for after it's running.
 
 ---
 
@@ -220,7 +206,7 @@ flowchart TD
 | Piece | What It's Built With | Why |
 |---|---|---|
 | Reasoning Engine | Python, Pydantic | Pydantic forces every AI answer to follow our exact required shape — an answer that doesn't fit gets rejected automatically |
-| AI Model Access | Anthropic Claude (direct) or OpenRouter | Two ways to reach an AI model, switchable with one setting, no code changes needed |
+| AI Model Access | Anthropic Claude (direct) | Every assessment calls Anthropic directly; model is switchable via one env var, no code changes needed |
 | API | FastAPI | Lightweight, fast, and automatically generates interactive docs |
 | Persistence | SQLite | A real, permanent database that needs no separate server — one file on disk. Trials, assessments, and decisions all survive a restart |
 | Dashboard | React + TanStack Start + Tailwind CSS | A modern, fast web app framework |
@@ -243,6 +229,8 @@ flowchart TD
 | GET | `/assessments` | List every assessment ever run, newest first (Assessment History view) |
 | GET | `/assessments/{assessment_id}` | Look up a past assessment |
 | POST | `/assessments/{assessment_id}/decision` | Record the coordinator's decision — Accept, Deny, or Needs More Review |
+| DELETE | `/assessments/{assessment_id}` | Permanently delete an assessment, its per-rule results, and any recorded decision (204; unknown id → 404) |
+| DELETE | `/trials/{trial_id}` | Delete a trial and its rulebook (204; refused with 409 while any assessments reference it) |
 
 Every response also includes an `X-Request-ID` header — a unique ID for that specific request, useful for tracing a problem through the logs later (see [Monitoring, Logging & Tracing](#monitoring-logging--tracing)).
 
@@ -275,42 +263,32 @@ Notice: no confidence score, no flat "yes." Just a status, a quote, and a note t
 
 ---
 
+## Guardrails
+
+The AI is never trusted blindly. Every assessment passes through two layers of safety checks (enforced in `reasoning_engine/guardrails.py`, wired into the API in `api/main.py`):
+
+- **Input guardrails** run *before* anything is sent to the AI, so a rejected record costs zero API credits: a 10,000-character length limit, PII pattern scanning (SSN-format numbers, email addresses, phone numbers), and injection-pattern scanning (instructional phrases like "ignore previous instructions"). A rejection is a clean **422** that never echoes the matched value — e.g. "Possible SSN detected in patient record."
+- **Output guardrail** runs after each AI answer: evidence the model quotes must actually appear in the patient record, or it's overridden to `unclear` rather than trusted as fact.
+
+Each guardrail has its own Prometheus counter (`input_length_rejected_total`, `input_pii_rejected_total`, `input_injection_rejected_total`, `hallucinated_evidence_caught_total`). See [monitoring_guide.md](./monitoring_guide.md) for the queries and [project_summary.md](./project_summary.md) for the full story, including the real false-positive fix.
+
+---
+
 ## Running It Yourself
 
-**The normal way to run CareMatch is with real AI (`LLM_MODE=real`).** Before any client demo, confirm the top-level `.env` has `LLM_MODE=real` and a valid API key — a missing key fails loudly with a 502, never quietly. There is also a **free developer testing mode** that returns placeholder answers; it exists only for the automated test suite and plumbing checks, and it must never be active during a demo. See `setup_guide.md` for full step-by-step instructions.
+Step-by-step run instructions — Docker or manual, plus all the local URLs and
+the data-persistence details — are in **[setup_guide.md](./setup_guide.md)**.
 
-**Everything at once, with Docker (recommended):**
-```bash
-docker compose up -d --build
-```
-Then open:
-- Dashboard: `http://localhost:8080`
-- API docs: `http://localhost:8000/docs`
-- Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000`
-
-**Data persists across restarts** — running `docker compose down` will never wipe anything:
-- Trials, assessments, and coordinator decisions are saved in SQLite (`api/db.py`), stored in a Docker volume (`api_data`) — this has been tested by actually killing the running server process and confirming the data survives.
-- Prometheus and Grafana also store their data in named volumes (`carematch_prometheus_data`, `carematch_grafana_data`).
-
-**Running pieces separately (for development):**
-```bash
-# Backend
-cd api
-pip install -r requirements.txt
-uvicorn main:app --reload
-
-# Frontend, in a separate terminal
-cd dashboard
-npm install
-npm run dev
-```
+One thing to remember before any client demo: **CareMatch always runs with
+real AI.** Confirm the top-level `.env` has a valid `ANTHROPIC_API_KEY` — a
+missing key fails loudly with a 502, never quietly. Every assessment makes a
+real, paid call to the AI model.
 
 ---
 
 ## Environment Variables
 
-**`LLM_MODE=real` is the normal configuration and the default.** Each variable below is only needed if you want to turn on the specific feature it controls. The free developer testing mode (`LLM_MODE=fake`) is for running the automated test suite without cost — it is never the configuration you run a real demo with.
+**CareMatch always makes real AI calls** — every assessment uses a small amount of API credits. The automated test suite is the exception: it substitutes a mock for the AI call from inside the test file itself, so tests are free to run and never touch the real API. Each variable below is only needed if you want to turn on the specific feature it controls.
 
 There are two different `.env` files depending on how you're running things:
 
@@ -321,12 +299,8 @@ There are two different `.env` files depending on how you're running things:
 
 | Variable | What It Does | Required When |
 |---|---|---|
-| `LLM_MODE` | `"real"` (default, normal) actually calls the AI model. `"fake"` is a **free developer testing mode** that returns placeholder answers — used only by the automated test suite, never in a real demo | Never — defaults to `"real"` |
-| `LLM_PROVIDER` | Which AI service to use: `"anthropic"` or `"openrouter"` | Never — has a default |
-| `ANTHROPIC_API_KEY` | Your Anthropic key | Only if `LLM_MODE=real` and `LLM_PROVIDER=anthropic` |
+| `ANTHROPIC_API_KEY` | Your Anthropic key | Always — every assessment makes a real call to Anthropic directly |
 | `ANTHROPIC_MODEL` | Which Anthropic model to use | Never — has a default |
-| `OPENROUTER_API_KEY` | Your OpenRouter key | Only if `LLM_MODE=real` and `LLM_PROVIDER=openrouter` |
-| `OPENROUTER_MODEL` | Which model via OpenRouter | Never — has a default |
 | `LANGSMITH_TRACING` | `"true"` turns on permanent AI decision logging | Never — defaults to off |
 | `LANGSMITH_API_KEY` | Your LangSmith key | Only if `LANGSMITH_TRACING=true` |
 | `LANGSMITH_PROJECT` | Which LangSmith project traces go into | Never — has a default |
@@ -341,7 +315,7 @@ There are two different `.env` files depending on how you're running things:
 
 ## Monitoring, Logging & Tracing
 
-CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question. **Want to look at these numbers yourself, click by click? See `monitoring_guide.md`.**
+CareMatch has three separate, complementary ways of watching what the system is doing — each answering a different question. **Want to look at these numbers yourself, click by click? See [monitoring_guide.md](./monitoring_guide.md).**
 
 ### 1. Prometheus + Grafana — "Is the system healthy?"
 Tracks system-wide numbers over time: how many assessments have run, how long reasoning takes, how often coordinators accept vs. deny, and standard web traffic stats. Prometheus collects the numbers (configured in `prometheus_config.yml`, which also watches its own health); Grafana turns them into charts. Good for spotting trends — "did things slow down this week?" — not for looking at one specific event.
@@ -357,11 +331,11 @@ While Prometheus shows *how many* checks ran, LangSmith shows the actual *conten
 ## Testing
 
 ```bash
-# Reasoning engine tests (no API key needed — uses a fake AI for testing)
+# Reasoning engine tests (no API key needed — injects a fake LLM for testing)
 cd reasoning_engine
 pytest test_engine.py -v
 
-# API tests (also free — forces fake mode automatically, uses a throwaway database)
+# API tests (also free — mocks the LLM call from the test file, uses a throwaway database)
 cd api
 pytest test_api.py -v
 ```
@@ -394,7 +368,7 @@ Building this surfaced some genuine bugs — the useful kind, found and fixed be
 4. **A leftover test service was quietly stealing web traffic meant for the real system**, because both were using the same computer port. Fixed by removing the old service entirely and building monitoring directly into the real system instead.
 5. **The app forgot everything every time it restarted.** All trials and assessments lived only in memory. Fixed by adding a real SQLite database — tested by actually killing the running server process and confirming the data survived.
 
-*(Full details of each issue, exactly what caused it and how it was proven fixed, are in `project_summary.md`.)*
+*(Full details of each issue, exactly what caused it and how it was proven fixed, are in [project_summary.md](./project_summary.md).)*
 
 ---
 

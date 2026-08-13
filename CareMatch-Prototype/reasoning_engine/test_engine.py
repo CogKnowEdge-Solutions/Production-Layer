@@ -12,6 +12,13 @@ NOTE: the EXC-01 rule text and its fake answers below were corrected
 after real-model testing revealed that negated ("must not...") exclusion
 rules confused the model into answering "does_not_match" almost
 regardless of the actual facts. See protocol.py for the full explanation.
+
+Also NOTE: every fake evidence string below is deliberately a REAL
+substring of its patient's record (after the guardrails landed, the 
+output guardrail in evaluate_single_rule() verifies quoted evidence
+against the record, so fake answers must be quote-accurate for these
+aggregation tests to stay focused on aggregation logic rather than the
+guardrail itself).
 """
 
 import pytest
@@ -39,7 +46,7 @@ FAKE_ANSWERS = {
         },
         "Patient is currently taking Warfarin": {
             "status": "does_not_match",  # they do NOT have this disqualifying condition -- good
-            "evidence": "Current Medications: Metformin 500mg twice daily (no Warfarin listed)",
+            "evidence": "Current Medications: Metformin 500mg twice daily",
         },
     },
     "P-1002": {
@@ -67,7 +74,7 @@ FAKE_ANSWERS = {
         },
         "Patient is currently taking Warfarin": {
             "status": "does_not_match",
-            "evidence": "Current Medications: Lisinopril 10mg daily (no Warfarin listed)",
+            "evidence": "Current Medications: Lisinopril 10mg daily",
         },
     },
 }
@@ -222,12 +229,16 @@ def test_completely_wrong_type_falls_back_to_unclear():
 def test_one_malformed_rule_does_not_affect_other_valid_rules():
     """If only ONE rule's output is malformed, the other rules should
     still be evaluated normally -- one bad response shouldn't nuke
-    everything else that worked fine."""
+    everything else that worked fine. (The valid rules' evidence below is
+    a real substring of the record, so the evidence-verification guardrail
+    accepts it unchanged -- the test stays focused on the malformed one.)"""
 
     def mixed_llm(rule_text, patient_record, category):
         if "50 years" in rule_text:
             return {"status": "not_a_real_status", "evidence": "broken"}  # malformed
-        return {"status": "matches", "evidence": "this one is fine"}  # valid
+        if "diagnosis of Type 2 Diabetes" in rule_text:
+            return {"status": "matches", "evidence": "Diagnoses: Type 2 Diabetes Mellitus, diagnosed 2019"}  # valid + verifiable
+        return {"status": "matches", "evidence": "Current Medications: Metformin 500mg twice daily"}  # valid + verifiable
 
     result = assess_patient(
         patient_id="P-1001",

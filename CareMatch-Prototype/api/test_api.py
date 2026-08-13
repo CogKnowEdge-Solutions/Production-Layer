@@ -1,8 +1,10 @@
 """
 Tests the API's HTTP layer: routing, validation, trial registration/lookup,
-and error handling. Forces LLM_MODE=fake so these never cost anything or
-touch the network -- they prove the plumbing works, not reasoning quality
-(that's Phase 1's job, already proven separately).
+and error handling. The real LLM call is replaced with a deterministic mock
+via unittest.mock.patch -- patching llm_client.call_llm from the test
+file, never inside main.py -- so these tests cost nothing, make zero network
+calls, and prove the plumbing works. Reasoning quality is proven separately
+against the real model, not in these tests.
 
 Also: since the API now persists to SQLite, tests run against a throwaway
 temp DB (never the real one), and one test proves the data really lands on
@@ -11,9 +13,12 @@ half of the "survives a hard kill" proof.
 """
 
 import os
+import re
 import tempfile
+from unittest import mock
 
-os.environ["LLM_MODE"] = "fake"
+import pytest
+
 os.environ["CAREMATCH_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "carematch-test.db")
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -21,6 +26,19 @@ from fastapi.testclient import TestClient  # noqa: E402
 from main import app  # noqa: E402
 
 client = TestClient(app)
+
+MOCKED_LLM_RESPONSE = {"status": "unclear", "evidence": "mocked for testing"}
+
+
+@pytest.fixture(autouse=True)
+def _mock_real_llm():
+    """Stand in for llm_client.call_llm across the whole test file.
+    main.py contains zero knowledge of this substitution -- it always calls
+    llm_client.call_llm, and the tests simply point that module
+    attribute at a deterministic fake, so no test ever makes a real paid
+    API call."""
+    with mock.patch("llm_client.call_llm", return_value=MOCKED_LLM_RESPONSE):
+        yield
 
 
 def test_list_trials_returns_all_registered_trials():
@@ -49,7 +67,8 @@ def test_list_trials_returns_all_registered_trials():
 
 def test_assess_records_which_provider_and_model_were_used():
     """Harness traceability: every assessment must record exactly which
-    model produced it, not leave that implicit or guessable."""
+    model produced it, resolved from the real provider config -- not left
+    implicit or guessable."""
     client.post(
         "/trials",
         json={
@@ -58,14 +77,17 @@ def test_assess_records_which_provider_and_model_were_used():
             "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
         },
     )
-    r = client.post(
-        "/assess",
-        json={"trial_id": "T-TRACE-TEST", "patient_id": "P-1", "patient_record": "record"},
-    )
+    with mock.patch.dict(
+        os.environ,
+        {"ANTHROPIC_MODEL": "claude-test-model"},
+    ):
+        r = client.post(
+            "/assess",
+            json={"trial_id": "T-TRACE-TEST", "patient_id": "P-1", "patient_record": "record"},
+        )
     data = r.json()
-    # LLM_MODE=fake for this whole test file, so we expect the fake markers
-    assert data["provider_used"] == "fake"
-    assert data["model_used"] == "fake-mode-no-llm-call"
+    assert data["provider_used"] == "anthropic"
+    assert data["model_used"] == "claude-test-model"
 
 
 def test_metrics_endpoint_exposes_carematch_specific_metrics():
@@ -93,7 +115,7 @@ def test_metrics_endpoint_exposes_carematch_specific_metrics():
     assert "reasoning_duration_seconds" in metrics_text
     assert "coordinator_decisions_total" in metrics_text
     # Confirm the label values we expect actually show up, not just the metric names
-    assert 'suggested_status="needs_more_info"' in metrics_text  # fake mode always returns this
+    assert 'suggested_status="needs_more_info"' in metrics_text  # mocked LLM always returns unclear
     assert 'decision="accepted"' in metrics_text
 
 
@@ -135,7 +157,7 @@ def test_assess_unknown_trial_returns_404():
     assert r.status_code == 404
 
 
-def test_assess_with_fake_llm_returns_correct_schema():
+def test_assess_with_mocked_llm_returns_correct_schema():
     client.post(
         "/trials",
         json={
@@ -159,7 +181,7 @@ def test_assess_with_fake_llm_returns_correct_schema():
     assert data["decision"] is None  # never pre-decided, ever
     assessment = data["assessment"]
 
-    # Fake LLM always says "unclear" -> aggregation must produce needs_more_info
+    # Mocked LLM always says "unclear" -> aggregation must produce needs_more_info
     assert assessment["suggested_status"] == "needs_more_info"
     assert assessment["requires_coordinator_approval"] is True
     assert len(assessment["rule_results"]) == 2
@@ -229,7 +251,7 @@ def test_list_assessments_returns_lightweight_summary_of_every_assessment():
         "created_at",
     }
     assert row["trial_id"] == "T-HISTORY-TEST"
-    assert row["suggested_status"] == "needs_more_info"  # fake LLM always
+    assert row["suggested_status"] == "needs_more_info"  # mocked LLM always returns unclear
     assert isinstance(row["created_at"], str) and row["created_at"]
 
     # Decision values come through correctly per assessment.
@@ -437,7 +459,7 @@ def test_data_persists_across_a_fresh_database_connection():
     """The storage-layer half of the persistence proof: everything the API
     wrote must be readable back through a brand-new sqlite3 connection --
     exactly what a freshly-started process would do. This exercises the
-    full join across trials -> rules and assessments -> rule_results ->
+    full join across trials -> rules -> assessments -> rule_results ->
     decisions, not just one table in isolation."""
     import sqlite3
 
@@ -494,3 +516,69 @@ def test_data_persists_across_a_fresh_database_connection():
         assert decision[0] == "accepted"
     finally:
         conn.close()
+
+
+def test_assess_with_ssn_in_record_is_rejected_422_without_leaking():
+    """An INPUT guardrail firing must come back as a clean 422 (well-formed
+    request, rejected CONTENT), never a 500 -- and the error response must
+    never echo the matched PII back to the caller."""
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-GUARD-1",
+            "trial_name": "Guardrail Trial",
+            "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
+        },
+    )
+    fake_ssn = "123-45-6789"
+    r = client.post(
+        "/assess",
+        json={
+            "trial_id": "T-GUARD-1",
+            "patient_id": "P-1",
+            "patient_record": f"Insurance card on file lists SSN {fake_ssn}.",
+        },
+    )
+    assert r.status_code == 422  # NOT 500
+    assert "possible ssn" in r.json()["detail"].lower()
+    assert fake_ssn not in r.text  # the error response must not leak the value
+
+    # The input_pii_rejected_total counter must actually fire, not just exist.
+    metrics_text = client.get("/metrics").text
+    assert re.search(r"input_pii_rejected_total(_total)?\s+1\.0", metrics_text)
+
+
+def test_hallucinated_evidence_is_overridden_to_unclear_and_counted():
+    """OUTPUT guardrail end to end through the API: when the LLM quotes
+    evidence that is NOT in the patient record, the saved assessment must
+    come out as "unclear" with the honest message -- and the
+    hallucinated_evidence_caught_total counter must increment."""
+    client.post(
+        "/trials",
+        json={
+            "trial_id": "T-HALL-1",
+            "trial_name": "Hallucination Trial",
+            "rules": [{"rule_id": "INC-01", "rule_text": "test rule", "category": "inclusion"}],
+        },
+    )
+
+    def hallucinating_llm(rule_text, patient_record, category):
+        return {"status": "matches", "evidence": "this quote is not in the record"}
+
+    with mock.patch("llm_client.call_llm", side_effect=hallucinating_llm):
+        r = client.post(
+            "/assess",
+            json={
+                "trial_id": "T-HALL-1",
+                "patient_id": "P-1",
+                "patient_record": "Patient has hypertension.",
+            },
+        )
+    assert r.status_code == 201
+    rule_result = r.json()["assessment"]["rule_results"][0]
+    assert rule_result["status"] == "unclear"  # status forced to unclear
+    assert "could not be verified" in rule_result["evidence"]
+
+    # The hallucinated_evidence_caught_total counter must actually fire.
+    metrics_text = client.get("/metrics").text
+    assert re.search(r"hallucinated_evidence_caught_total(_total)?\s+1\.0", metrics_text)

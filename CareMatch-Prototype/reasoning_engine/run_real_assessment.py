@@ -1,10 +1,10 @@
 """
-Run this yourself, with your own OpenRouter key set, to see REAL LLM
-reasoning end to end -- not the fake canned answers used in test_engine.py.
+Run this yourself, with your own Anthropic key set, to see REAL LLM
+reasoning end to end -- not the canned answers used in test_engine.py.
 
 Setup:
     1. Copy .env.example to .env (same folder)
-    2. Open .env and paste in your real OPENROUTER_API_KEY
+    2. Open .env and paste in your real ANTHROPIC_API_KEY
     3. pip install -r requirements.txt
     4. python run_real_assessment.py
 
@@ -19,7 +19,7 @@ import sys
 import time
 
 from engine import assess_patient
-from llm_client import call_real_llm
+from llm_client import call_llm
 from test_data.fixtures import ALL_TEST_PATIENTS, DIABETES_TRIAL
 
 if __name__ == "__main__":
@@ -47,7 +47,7 @@ if __name__ == "__main__":
             patient_id=patient["patient_id"],
             patient_record=patient["record"],
             protocol=DIABETES_TRIAL,
-            call_llm=call_real_llm,
+            call_llm=call_llm,
         )
 
         print(json.dumps(result.model_dump(), indent=2))

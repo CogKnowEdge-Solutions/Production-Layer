@@ -1,6 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { decisionDisplayLabel, listAssessments, SUGGESTED_STATUS_LABEL } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  ApiError,
+  decisionDisplayLabel,
+  deleteAssessment,
+  listAssessments,
+  SUGGESTED_STATUS_LABEL,
+  type AssessmentSummary,
+} from "@/lib/api";
 
 export const Route = createFileRoute("/history")({
   head: () => ({
@@ -30,10 +38,40 @@ function decisionTone(decision: string | null): string {
 
 function History() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const assessmentsQuery = useQuery({
     queryKey: ["assessments"],
     queryFn: listAssessments,
   });
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete(row: AssessmentSummary) {
+    // Honest by design: deleting an assessment permanently removes real
+    // audit evidence. This confirmation is deliberately explicit -- it
+    // should never be possible to trigger with a single accidental click.
+    const confirmed = window.confirm(
+      `Delete this assessment for ${row.patient_id} (${row.assessment_id})? ` +
+        "This permanently removes the record, its evidence, and any recorded " +
+        "decision. This cannot be undone.",
+    );
+    if (!confirmed) return;
+    setDeletingId(row.assessment_id);
+    setDeleteError(null);
+    try {
+      await deleteAssessment(row.assessment_id);
+      queryClient.invalidateQueries({ queryKey: ["assessments"] });
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't delete this assessment. Please try again.";
+      setDeleteError(message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-12">
@@ -68,6 +106,11 @@ function History() {
 
       {assessmentsQuery.data && assessmentsQuery.data.length > 0 && (
         <div className="mt-8 overflow-x-auto border border-border bg-card">
+          {deleteError && (
+            <p className="border-b border-border bg-nomatch/8 px-5 py-3 text-sm text-nomatch">
+              {deleteError}
+            </p>
+          )}
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-border bg-secondary/60 font-mono text-[0.68rem] uppercase tracking-widest text-muted-foreground">
@@ -76,6 +119,7 @@ function History() {
                 <th className="px-5 py-3 font-medium">AI suggestion</th>
                 <th className="px-5 py-3 font-medium">Decision</th>
                 <th className="px-5 py-3 font-medium">Recorded</th>
+                <th className="px-5 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -112,6 +156,19 @@ function History() {
                   </td>
                   <td className="border-t border-border/60 px-5 py-4 font-mono text-xs text-muted-foreground">
                     {a.created_at}
+                  </td>
+                  <td className="border-t border-border/60 px-5 py-4 text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(a);
+                      }}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      disabled={deletingId === a.assessment_id}
+                      className="text-sm text-nomatch underline underline-offset-4 hover:text-nomatch/80 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingId === a.assessment_id ? "Deleting…" : "Delete"}
+                    </button>
                   </td>
                 </tr>
               ))}

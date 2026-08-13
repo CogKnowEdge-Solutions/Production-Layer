@@ -6,10 +6,11 @@ Persistence: trials, assessments, and coordinator decisions live in a
 SQLite database (api/db.py), not in memory -- a hard process kill no
 longer loses anything (that's proven by a real kill-and-restart test).
 
-LLM_MODE controls cost: "real" (default) makes actual LLM calls through
-Phase 1's llm_client. "fake" always returns "unclear" with zero cost and
-zero network calls -- use this to test the API's plumbing (does routing,
-validation, and error handling work?) without spending anything.
+Real AI only: every assessment always goes through Phase 1's llm_client
+and makes an actual LLM call. There is no test-mode toggle in this code --
+tests substitute a mock for llm_client.call_llm from the test file
+itself, so the application contains zero knowledge that the substitution
+is happening.
 """
 
 import logging
@@ -21,7 +22,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -29,10 +30,10 @@ from pydantic import BaseModel, field_validator
 
 import db
 
-# Loads api/.env if one exists. This is the reliable way to set LLM_MODE
-# (and real API keys, later) -- it works the same regardless of which
-# shell/terminal you're using, unlike `set` or `$env:` which differ between
-# Command Prompt and PowerShell and are easy to get wrong.
+# Loads api/.env if one exists. This is the reliable way to set real API
+# keys -- it works the same regardless of which shell/terminal you're
+# using, unlike `set` or `$env:` which differ between Command Prompt and
+# PowerShell and are easy to get wrong.
 load_dotenv()
 
 # reasoning_engine/ is a sibling directory, not an installed package.
@@ -45,6 +46,7 @@ from engine import assess_patient  # noqa: E402
 from protocol import Protocol, Rule  # noqa: E402
 from schema import AssessmentResult, RuleResult, RULE_ID_PATTERN, SuggestedStatus  # noqa: E402
 import llm_client  # noqa: E402
+import guardrails  # noqa: E402
 
 app = FastAPI(title="CareMatch API", description="Phase 2 -- the doorway into the reasoning engine")
 
@@ -77,6 +79,32 @@ trials_registered_total = Counter(
     "trials_registered_total",
     "Total trials registered via POST /trials",
 )
+
+# Guardrail metrics: how often each input guardrail actually rejects a record
+# (incremented at the point the violation reaches the API layer), plus how
+# often the output guardrail catches a hallucinated evidence quote.
+input_length_rejected_total = Counter(
+    "input_length_rejected_total",
+    "Patient records rejected by the input length limit before any AI call",
+)
+input_pii_rejected_total = Counter(
+    "input_pii_rejected_total",
+    "Patient records rejected by PII pattern scanning (SSN/email/phone) before any AI call",
+)
+input_injection_rejected_total = Counter(
+    "input_injection_rejected_total",
+    "Patient records rejected by injection-pattern scanning before any AI call",
+)
+hallucinated_evidence_caught_total = Counter(
+    "hallucinated_evidence_caught_total",
+    "Rule results where the AI's quoted evidence could not be verified against the patient record and was overridden to unclear",
+)
+
+# Wire the output guardrail's override signal (it fires deep inside
+# evaluate_single_rule, where the engine has no Prometheus dependency) to
+# this counter. When this API is running, every caught hallucination counts;
+# run_real_assessment.py still logs the override, just without the counter.
+guardrails.set_hallucinated_evidence_hook(hallucinated_evidence_caught_total.inc)
 
 # Without this, the browser blocks every request the dashboard makes to
 # this API by default (CORS) -- it's not optional for a browser-based
@@ -233,16 +261,6 @@ class DecisionRequest(BaseModel):
     reason: str | None = None
 
 
-def _fake_llm(rule_text: str, patient_record: str, category: str) -> dict:
-    """
-    Zero-cost stand-in for LLM_MODE=fake. Always returns "unclear" -- this
-    only proves the request reached the engine and came back in the right
-    shape. It does NOT test reasoning quality (that's what Phase 1's
-    run_real_assessment.py is for).
-    """
-    return {"status": "unclear", "evidence": "FAKE MODE -- no real LLM call was made"}
-
-
 def _protocol_from_row(row: dict) -> Protocol:
     return Protocol(
         trial_id=row["trial_id"],
@@ -302,6 +320,31 @@ def get_trial(trial_id: str):
     return _protocol_from_row(row)
 
 
+@app.delete("/trials/{trial_id}", status_code=204)
+def delete_trial(trial_id: str):
+    """Delete a trial, but ONLY when no assessment references it. The audit
+    trail is this project's whole reason to exist, so deleting a trial that
+    historical assessments point at is refused with a 409 naming exactly how
+    many assessments are blocking it -- the coordinator can decide to remove
+    those assessments first, never silently. When it does proceed, the
+    trial's rules cascade away via the schema's ON DELETE CASCADE."""
+    if db.get_trial(trial_id) is None:
+        raise HTTPException(status_code=404, detail=f"No trial registered with id '{trial_id}'")
+    blocking = db.count_assessments_for_trial(trial_id)
+    if blocking > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete trial '{trial_id}': {blocking} assessment(s) "
+                "still reference it. Deleting this trial would orphan that "
+                "historical assessment evidence, so deletion is blocked until "
+                "those assessments are removed first."
+            ),
+        )
+    db.delete_trial(trial_id)
+    return Response(status_code=204)
+
+
 @app.post("/assess", response_model=AssessmentRecord, status_code=201)
 def assess(body: AssessRequest):
     trial_row = db.get_trial(body.trial_id)
@@ -315,17 +358,27 @@ def assess(body: AssessRequest):
         )
     protocol = _protocol_from_row(trial_row)
 
-    llm_mode = os.environ.get("LLM_MODE", "real").lower()
-    call_llm = _fake_llm if llm_mode == "fake" else llm_client.call_real_llm
-
     start = time.monotonic()
     try:
         result = assess_patient(
             patient_id=body.patient_id,
             patient_record=body.patient_record,
             protocol=protocol,
-            call_llm=call_llm,
+            call_llm=llm_client.call_llm,
         )
+    except guardrails.GuardrailViolation as exc:
+        # An INPUT guardrail fired: assess_patient checks the record at its
+        # very start, so this was rejected before any AI call -- no cost was
+        # incurred. 422 (well-formed request whose CONTENT is rejected), not
+        # 500. The detail message is safe to return: guardrails never echo
+        # the matched value back, so nothing sensitive leaks to the caller.
+        if exc.check == guardrails.CHECK_LENGTH:
+            input_length_rejected_total.inc()
+        elif exc.check == guardrails.CHECK_PII:
+            input_pii_rejected_total.inc()
+        elif exc.check == guardrails.CHECK_INJECTION:
+            input_injection_rejected_total.inc()
+        raise HTTPException(status_code=422, detail=exc.message) from exc
     except llm_client.LLMError as exc:
         raise HTTPException(status_code=502, detail=f"LLM error: {exc}") from exc
     finally:
@@ -338,14 +391,9 @@ def assess(body: AssessRequest):
     # Traceability: record exactly which provider/model actually produced
     # this assessment, resolved the same way llm_client itself resolves it,
     # so this is never guessed or out of sync with what really ran.
-    if llm_mode == "fake":
-        provider_used, model_used = "fake", "fake-mode-no-llm-call"
-    else:
-        provider_used = os.environ.get("LLM_PROVIDER", "openrouter").lower()
-        if provider_used == "anthropic":
-            model_used = os.environ.get("ANTHROPIC_MODEL", llm_client.DEFAULT_ANTHROPIC_MODEL)
-        else:
-            model_used = os.environ.get("OPENROUTER_MODEL", llm_client.DEFAULT_OPENROUTER_MODEL)
+    # Anthropic direct is the only provider.
+    provider_used = "anthropic"
+    model_used = os.environ.get("ANTHROPIC_MODEL", llm_client.DEFAULT_ANTHROPIC_MODEL)
 
     record = AssessmentRecord(
         assessment_id=str(uuid.uuid4()),
@@ -382,6 +430,21 @@ def get_assessment(assessment_id: str):
             status_code=404, detail=f"No assessment found with id '{assessment_id}'"
         )
     return _record_from_row(row)
+
+
+@app.delete("/assessments/{assessment_id}", status_code=204)
+def delete_assessment(assessment_id: str):
+    """Permanently delete an assessment. This removes real audit evidence
+    (the record AND, via ON DELETE CASCADE, its per-rule results and any
+    coordinator decision), so it 404s on an unknown id and the dashboard
+    wraps it in an explicit, un-dismissable-by-accident confirmation. The
+    API itself is deliberately blunt: it does what it's told, and the UI
+    owns the warning."""
+    if not db.delete_assessment(assessment_id):
+        raise HTTPException(
+            status_code=404, detail=f"No assessment found with id '{assessment_id}'"
+        )
+    return Response(status_code=204)
 
 
 @app.post("/assessments/{assessment_id}/decision", response_model=AssessmentRecord)

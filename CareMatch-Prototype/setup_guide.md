@@ -15,28 +15,36 @@ You need one thing installed: **Docker Desktop**. This is the only requirement �
 
 ## Step 1 — Get the Code
 
-If you haven't already, download or clone the project folder onto your computer. You should see folders like `api/`, `dashboard/`, `reasoning_engine/`, and a file called `docker-compose.yml` at the top level.
+CareMatch-Prototype lives inside the `Production-Layer` repository (a monorepo that holds more than one project). To fetch **only** this folder without the rest of the repo, use a "sparse checkout":
 
-Open a terminal (Command Prompt, PowerShell, or Terminal) and navigate into that top-level folder — the one containing `docker-compose.yml`.
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/CogKnowEdge-Solutions/Production-Layer.git
+cd Production-Layer
+git sparse-checkout set CareMatch-Prototype
+cd CareMatch-Prototype
+```
+
+That last `cd CareMatch-Prototype` is the folder you'll stay in for every later command in this guide. You should see folders like `api/`, `dashboard/`, `reasoning_engine/`, and a file called `docker-compose.yml` at the top level.
+
+> **Already have the project folder?** Skip the commands above and just open a terminal (Command Prompt, PowerShell, or Terminal) inside the folder that contains `docker-compose.yml`.
 
 ---
 
-## Step 2 — Real AI Is the Normal Way to Run CareMatch
+## Step 2 — CareMatch Always Runs with Real AI
 
-**Important thing to know:** CareMatch is built to run with **real AI** — that is the normal configuration and what any real user (or client demo) should see. There is also a **free developer testing mode** (`LLM_MODE=fake`) that returns placeholder answers instead of asking the AI. That mode exists so the automated test suite and plumbing checks cost nothing — it is **not** the mode you run the app in for a real demo.
+**Important thing to know:** CareMatch always runs with **real AI** — that is the only configuration. Every assessment makes a real call to an AI model and uses a small amount of API credits. There is no test/fake mode in the app itself. (The automated test suite is the one exception: it substitutes a mock for the AI call from inside the test file, so running the tests never costs anything and never touches the real API.)
 
-**For any real use or demo, continue to Step 3 — real AI with a valid API key is the expected setup.**
+**To run the app you need a valid API key — continue to Step 3.**
 
 ---
 
-## Step 3 — (Optional) Set Up Real AI
+## Step 3 — Set Up Real AI
 
 1. In the top-level folder, find the file called `.env.example`. Make a copy of it in the same folder, and rename the copy to exactly `.env` (no `.example` at the end).
 2. Open `.env` in a text editor.
 3. Get a free or paid API key from [console.anthropic.com](https://console.anthropic.com) (click around for "API Keys").
-4. In your `.env` file, change these two lines:
+4. In your `.env` file, change this line:
    ```
-   LLM_MODE=real
    ANTHROPIC_API_KEY=paste-your-real-key-here
    ```
 5. Save the file.
@@ -80,7 +88,7 @@ How to read the result:
 2. **On Windows, this must be run in PowerShell using `curl.exe` specifically** — not plain `curl`. Plain `curl` secretly runs a different Windows command (`Invoke-WebRequest`) that doesn't understand this syntax and will show a confusing error like `Missing an argument for parameter 'SessionVariable'`. Using `curl.exe` (with the `.exe` on the end) makes PowerShell use the real curl program, which works.
 3. **A successful run shows real JSON text ending in `HTTP status: 200`.** Inside that JSON, look for a field called `id` — that long string (something like `3d46e6ff-4cba-4827-a504-b69772d9b27c`) is your workspace ID. Copy that value into the `LANGSMITH_WORKSPACE_ID=` line in your `.env` file.
 
-**Nothing here is required just to start the app** — but for any real use or demo, `LLM_MODE=real` with a valid key is the expected configuration. Without a key, assessments fail loudly with an error rather than silently returning placeholder answers; the app never fakes a result by accident. The free developer testing mode is reserved for running the automated test suite, not for demos.
+**Nothing here is required just to start the app** — but without a key, assessments fail loudly with an error rather than silently returning placeholder answers; the app never fakes a result by accident.
 
 ---
 
@@ -110,9 +118,8 @@ cd api
 pip install -r requirements.txt -r ../reasoning_engine/requirements.txt
 ```
 
-Real AI is the normal configuration. Create a file named `.env` right here inside the `api` folder (not the top-level one — this backend reads its own local `.env`) with:
+Every assessment makes a real AI call. Create a file named `.env` right here inside the `api` folder (not the top-level one — this backend reads its own local `.env`) with:
 ```
-LLM_MODE=real
 ANTHROPIC_API_KEY=your-real-key-here
 ```
 
@@ -210,6 +217,9 @@ docker compose up -d
 **Port already in use**
 → Something else on your computer is already using one of the ports (8000, 8080, or — Docker only — 9090, 3000). Close whatever that is, or ask for help changing the port.
 
-**I set up a real API key, but it's still not doing real AI reasoning**
-→ Docker: double-check the top-level `.env` has `LLM_MODE=real`, then run `docker compose up -d --build` again.
-→ Manual setup: double-check `api/.env` (not the top-level one) has `LLM_MODE=real`, then restart `uvicorn` (`Ctrl+C`, then run it again).
+**Assessments fail with an error even though I added an API key**
+→ Docker: double-check the top-level `.env` has a valid `ANTHROPIC_API_KEY`, then run `docker compose up -d --build` again.
+→ Manual setup: double-check `api/.env` (not the top-level one) has the same, then restart `uvicorn` (`Ctrl+C`, then run it again).
+
+**My assessment was rejected — "Possible SSN detected in patient record" (or similar)**
+→ CareMatch runs input guardrails before anything is sent to the AI, and if one fires, the API refuses the record with a clean error (HTTP 422) and a message like **"Possible SSN detected in patient record."**, **"Possible email address detected in patient record."**, **"Possible phone number detected in patient record."**, or **"Suspicious instructional content detected in patient record field."** — or a length message for records over 10,000 characters. The message deliberately never shows the exact text that triggered it. If a real patient record trips this, look inside the record you pasted for an SSN-format number, an email address, a phone number, or instruction-like wording (for example "ignore previous instructions"), remove it, and re-run. These checks are described in `monitoring_guide.md`.

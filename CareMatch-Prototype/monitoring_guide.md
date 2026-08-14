@@ -65,6 +65,8 @@ scrape_configs:
       - targets: ["localhost:9090"]
 ```
 
+**If you deploy your own instance, update the `carematch-api-live` target.** The address `carematch-api-726123996575.us-central1.run.app` is *this project's* live URL. If someone clones the repo and deploys their own separate instance of the API, they must change that target to their own address — otherwise their Prometheus would silently scrape the original team's deployment by default, and the "deployed" charts wouldn't be their app at all.
+
 After editing `prometheus_config.yml`, reload it into the running container (the file is bind-mounted, so no rebuild is needed):
 
 ```

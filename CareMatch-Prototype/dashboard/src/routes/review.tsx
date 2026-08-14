@@ -68,11 +68,18 @@ function Review() {
 
   const [panel, setPanel] = useState<"deny" | "needs_more_review" | null>(null);
   const [reason, setReason] = useState(DEFAULT_REASON);
+  // True ONLY in the instant this browser session submitted "needs_more_review"
+  // (set inside the mutation's onSuccess). Deliberately NOT derived from
+  // record.decision: an assessment that already has needs_more_review when it
+  // loads (via URL, Assessment History, or localStorage restore) must still
+  // show the finalize buttons. Only the just-clicked moment suppresses them.
+  const [justFlagged, setJustFlagged] = useState(false);
 
   const decisionMutation = useMutation({
     mutationFn: (input: { decision: Decision; reason?: string }) => recordDecision(id, input),
     onSuccess: (record) => {
       queryClient.setQueryData(["assessment", id], record);
+      if (record.decision === "needs_more_review") setJustFlagged(true);
       setPanel(null);
       setReason(DEFAULT_REASON);
     },
@@ -293,64 +300,87 @@ function Review() {
             )}
           </>
         ) : record.decision === "needs_more_review" ? (
-          <>
+          justFlagged ? (
             <div className="border-l-4 border-l-unclear bg-unclear/8 p-6">
               <p className="font-mono text-[0.68rem] uppercase tracking-widest text-muted-foreground">
                 Decision recorded — awaiting final decision
               </p>
-              <h2 className="mt-2 text-xl text-structure">
-                {decisionDisplayLabel(record.decision)}
-              </h2>
+              <h2 className="mt-2 text-xl text-structure">Flagged for further review</h2>
               {record.decision_reason && (
                 <div className="evidence mt-3 max-w-2xl">{record.decision_reason}</div>
               )}
-              <p className="mt-3 text-xs text-muted-foreground">
-                Not final. Return when the missing information is available.
+              <p className="mt-3 text-sm text-muted-foreground">
+                You can return to this assessment anytime once you have what you need.
               </p>
+              <div className="mt-5 flex flex-wrap gap-5">
+                <Link to="/" className="text-sm text-primary underline underline-offset-4">
+                  New assessment
+                </Link>
+                <Link to="/history" className="text-sm text-primary underline underline-offset-4">
+                  Assessment History
+                </Link>
+              </div>
             </div>
-
-            <div className="mt-6">
-              <h3 className="text-base">Finalize this decision</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Recorded by coordinator · {a.patient_id} · {a.trial_id}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <button
-                  onClick={() => decisionMutation.mutate({ decision: "accepted" })}
-                  disabled={decisionMutation.isPending}
-                  className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Accept
-                </button>
-                <button
-                  onClick={() => setPanel(panel === "deny" ? null : "deny")}
-                  disabled={decisionMutation.isPending}
-                  className="border border-structure/50 px-5 py-2.5 text-sm font-medium text-structure transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Deny
-                </button>
+          ) : (
+            <>
+              <div className="border-l-4 border-l-unclear bg-unclear/8 p-6">
+                <p className="font-mono text-[0.68rem] uppercase tracking-widest text-muted-foreground">
+                  Decision recorded — awaiting final decision
+                </p>
+                <h2 className="mt-2 text-xl text-structure">
+                  {decisionDisplayLabel(record.decision)}
+                </h2>
+                {record.decision_reason && (
+                  <div className="evidence mt-3 max-w-2xl">{record.decision_reason}</div>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Not final. Return when the missing information is available.
+                </p>
               </div>
 
-              {panel === "deny" && (
-                <DecisionPanel
-                  title="Why are you denying this assessment?"
-                  required
-                  placeholder="Documented rationale, recorded with the assessment."
-                  reason={reason}
-                  onChange={setReason}
-                  pending={decisionMutation.isPending}
-                  submitLabel={decisionMutation.isPending ? "Saving…" : "Confirm deny"}
-                  onSubmit={() =>
-                    decisionMutation.mutate({ decision: "denied", reason: reason.trim() })
-                  }
-                  onCancel={() => {
-                    setPanel(null);
-                    setReason(DEFAULT_REASON);
-                  }}
-                />
-              )}
-            </div>
-          </>
+              <div className="mt-6">
+                <h3 className="text-base">Finalize this decision</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Recorded by coordinator · {a.patient_id} · {a.trial_id}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => decisionMutation.mutate({ decision: "accepted" })}
+                    disabled={decisionMutation.isPending}
+                    className="bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-structure disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => setPanel(panel === "deny" ? null : "deny")}
+                    disabled={decisionMutation.isPending}
+                    className="border border-structure/50 px-5 py-2.5 text-sm font-medium text-structure transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Deny
+                  </button>
+                </div>
+
+                {panel === "deny" && (
+                  <DecisionPanel
+                    title="Why are you denying this assessment?"
+                    required
+                    placeholder="Documented rationale, recorded with the assessment."
+                    reason={reason}
+                    onChange={setReason}
+                    pending={decisionMutation.isPending}
+                    submitLabel={decisionMutation.isPending ? "Saving…" : "Confirm deny"}
+                    onSubmit={() =>
+                      decisionMutation.mutate({ decision: "denied", reason: reason.trim() })
+                    }
+                    onCancel={() => {
+                      setPanel(null);
+                      setReason(DEFAULT_REASON);
+                    }}
+                  />
+                )}
+              </div>
+            </>
+          )
         ) : (
           <div className="border-l-4 border-l-structure bg-secondary p-6">
             <p className="font-mono text-[0.68rem] uppercase tracking-widest text-muted-foreground">

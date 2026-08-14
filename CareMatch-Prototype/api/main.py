@@ -120,6 +120,7 @@ _default_allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://carematch-dashboard.vercel.app",
+    "https://carematch-dashboard-726123996575.us-central1.run.app",
 ]
 _extra_origins = [
     origin.strip()

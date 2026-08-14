@@ -16,7 +16,6 @@ RUN npm run build
 FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV NITRO_PORT=8080
 COPY --from=build /app/dashboard/.output /app/.output
 EXPOSE 8080
-CMD ["node", ".output/server/index.mjs"]
+CMD ["sh", "-c", "NITRO_PORT=${PORT:-8080} exec node .output/server/index.mjs"]

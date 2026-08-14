@@ -20,4 +20,4 @@ COPY reasoning_engine /app/reasoning_engine
 # Cloud Run sets PORT env var (default 8080)
 # App must listen on 0.0.0.0 to accept external traffic
 EXPOSE 8080
-CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}

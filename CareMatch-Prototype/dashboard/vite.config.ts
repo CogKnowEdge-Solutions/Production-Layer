@@ -11,7 +11,7 @@ export default defineConfig({
     // Default builds a plain Node.js server (used by the Docker container).
     // Set NITRO_PRESET=vercel as an env var (e.g. in Vercel project settings)
     // to emit the Vercel functions output instead.
-    preset: process.env.NITRO_PRESET || "node-server",
+    preset: process.env["NITRO_PRESET"] || "node-server",
   },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).

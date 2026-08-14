@@ -19,6 +19,7 @@
 - [The API](#the-api)
 - [Guardrails](#guardrails)
 - [Running It Yourself](#running-it-yourself)
+- [Deployment — Cloud Run (Live)](#deployment--cloud-run-live)
 - [Environment Variables](#environment-variables)
 - [Monitoring, Logging & Tracing](#monitoring-logging--tracing)
 - [Testing](#testing)
@@ -128,7 +129,7 @@ flowchart LR
     subgraph Backend
         API[API<br/>FastAPI]
         ENGINE[Reasoning Engine<br/>Python]
-        DB[(SQLite<br/>trials, assessments, decisions)]
+        DB[(Postgres on Supabase<br/>trials, assessments, decisions)]
     end
 
     subgraph Monitoring
@@ -153,7 +154,7 @@ flowchart LR
 - **Dashboard** — the webpage a coordinator actually looks at
 - **API** — the doorway other systems (like the dashboard) use to send data in and get answers back
 - **Reasoning Engine** — the actual "brain." It goes through a trial's rules one at a time
-- **SQLite database** — where trial rules, patient assessments, and coordinator decisions are permanently stored, so nothing is lost if the app restarts
+- **Postgres database (Supabase)** — where trial rules, patient assessments, and coordinator decisions are permanently stored, so nothing is lost if the app restarts — and since the database is hosted remotely, not even a hard kill of the app machine loses it
 - **AI Model** — the underlying language model that reads the patient text and judges each rule
 - **Prometheus & Grafana** — a health dashboard for the *system itself* (is it fast? is it breaking? how many checks has it done?), separate from the coordinator's dashboard
 - **LangSmith** (optional) — a permanent, browsable history of every individual AI decision, useful for reviewing or evaluating reasoning quality later
@@ -162,7 +163,7 @@ flowchart LR
 
 ## Project Structure
 
-This shows the key files — a few generated/config files (requirements.txt, Dockerfiles, test_data/) are left out to keep this readable.
+This shows the key files — a few generated/config files (requirements.txt, test_data/) are left out to keep this readable.
 
 ```mermaid
 flowchart TD
@@ -178,7 +179,7 @@ flowchart TD
     RE --> RE_DATA[test_data/<br/>Sample patient records used by the automated tests]
     ROOT --> API[api/<br/>The doorway — turns the reasoning engine into a web service]
     API --> API_MAIN[main.py<br/>All the API endpoints, plus request logging]
-    API --> API_DB[db.py<br/>SQLite persistence — trials, assessments, decisions survive restarts]
+    API --> API_DB[db.py<br/>Postgres (Supabase) persistence — trials, assessments, decisions survive restarts]
     API --> API_TEST[test_api.py<br/>Automated tests for the API itself]
     API --> API_DOCKER[Dockerfile]
     API --> API_REQ[requirements.txt]
@@ -195,6 +196,8 @@ flowchart TD
     ROOT --> SEED[seed_data.md<br/>Copy-paste examples to try once the app is running]
     ROOT --> MON[monitoring_guide.md<br/>What Prometheus and Grafana are, and how to look at the numbers yourself]
     ROOT --> DC[docker-compose.yml<br/>Starts everything — API, dashboard, monitoring — with one command]
+    ROOT --> CDF[Dockerfile<br/>Cloud Run image for the API — listens on ${PORT:-8000}]
+    ROOT --> CBD[cloudbuild.dashboard.yaml<br/>Builds the dashboard image with the live API URL baked in]
     ROOT --> PC[prometheus_config.yml<br/>Tells Prometheus which services to watch, including itself]
     ROOT --> RM[README.md<br/>You are here, at the project root]
 ```
@@ -208,7 +211,7 @@ flowchart TD
 | Reasoning Engine | Python, Pydantic | Pydantic forces every AI answer to follow our exact required shape — an answer that doesn't fit gets rejected automatically |
 | AI Model Access | Anthropic Claude (direct) | Every assessment calls Anthropic directly; model is switchable via one env var, no code changes needed |
 | API | FastAPI | Lightweight, fast, and automatically generates interactive docs |
-| Persistence | SQLite | A real, permanent database that needs no separate server — one file on disk. Trials, assessments, and decisions all survive a restart |
+| Persistence | Postgres (Supabase) | A hosted Postgres database — trials, assessments, and decisions survive a restart and even a hard kill of the app process |
 | Dashboard | React + TanStack Start + Tailwind CSS | A modern, fast web app framework |
 | Metrics | Prometheus + Grafana | Industry-standard tools for watching the system's health in real time |
 | AI Tracing (optional) | LangSmith | Records every individual AI reasoning call permanently, so decisions can be reviewed or evaluated later — not just watched live |
@@ -278,6 +281,8 @@ Each guardrail has its own Prometheus counter (`input_length_rejected_total`, `i
 
 Step-by-step run instructions — Docker or manual, plus all the local URLs and
 the data-persistence details — are in **[setup_guide.md](./setup_guide.md)**.
+If you'd rather use the live hosted version than run your own copy, see
+[Deployment — Cloud Run (Live)](#deployment--cloud-run-live).
 
 One thing to remember before any client demo: **CareMatch always runs with
 real AI.** Confirm the top-level `.env` has a valid `ANTHROPIC_API_KEY` — a
@@ -286,16 +291,71 @@ real, paid call to the AI model.
 
 ---
 
+## Deployment — Cloud Run (Live)
+
+The whole stack is deployed to Google Cloud Run and is reachable from anywhere with an internet connection:
+
+| Service | Live URL |
+|---|---|
+| CareMatch API | `https://carematch-api-726123996575.us-central1.run.app` |
+| CareMatch Dashboard | `https://carematch-dashboard-726123996575.us-central1.run.app` |
+
+Project: `infra-window-477206-f2` · Region: `us-central1`. This is a real deployment — real Supabase Postgres, real Anthropic calls — so a live assessment still spends a little API credit.
+
+### The API image
+
+The top-level `Dockerfile` builds the API for Cloud Run. Its last line is the one Cloud Run cares about:
+
+```dockerfile
+CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+```
+
+Cloud Run injects `PORT` (default 8080) at runtime, so the app listens on `0.0.0.0` and the port Cloud Run expects; `${PORT:-8000}` keeps it runnable on a local machine too. Deploy it with:
+
+```bash
+gcloud run deploy carematch-api --source . --region us-central1 --allow-unauthenticated
+```
+
+### The dashboard image
+
+The dashboard's `Dockerfile` builds a TanStack Start/Nitro app (the `node-server` preset) and ships only the built `.output/`. Nitro's bundled server reads `NITRO_PORT`, then `PORT`, and falls back to **3000** if both are unset — so the container maps Cloud Run's `PORT` onto Nitro explicitly:
+
+```dockerfile
+CMD ["sh", "-c", "NITRO_PORT=${PORT:-8080} exec node .output/server/index.mjs"]
+```
+
+**The one dashboard gotcha:** the API URL is baked in at **build time**, not read at runtime. `dashboard/src/lib/api.ts` resolves `import.meta.env.VITE_API_BASE_URL`, so the dashboard image must be built with `--build-arg VITE_API_BASE_URL=https://carematch-api-726123996575.us-central1.run.app`. Two consequences:
+
+- `gcloud run deploy carematch-dashboard --source ./dashboard` **does not work for this project**: the Dockerfile copies `dashboard/...` (it needs the repo root as build context) and `gcloud run deploy` has no `--build-arg` flag — the image would bake in `http://localhost:8000`, and the live dashboard would ask each visitor's own browser to fetch from their computer.
+- The correct path is a two-step build-then-deploy via `cloudbuild.dashboard.yaml`, which passes the live API URL as the build arg:
+
+```bash
+gcloud builds submit . --config cloudbuild.dashboard.yaml
+gcloud run deploy carematch-dashboard \
+  --image us-central1-docker.pkg.dev/infra-window-477206-f2/cloud-run-source-deploy/carematch-dashboard \
+  --region us-central1 \
+  --allow-unauthenticated
+```
+
+### CORS and health
+
+`api/main.py` whitelists both dashboard origins — the local dev server (`http://localhost:8080`) and the live Cloud Run dashboard — so the browser can call the API from either one. The live API also exposes `/health` and `/metrics`.
+
+---
+
 ## Environment Variables
 
 **CareMatch always makes real AI calls** — every assessment uses a small amount of API credits. The automated test suite is the exception: it substitutes a mock for the AI call from inside the test file itself, so tests are free to run and never touch the real API. Each variable below is only needed if you want to turn on the specific feature it controls.
 
-There are two different `.env` files depending on how you're running things:
+There are a few different `.env` files depending on how you're running things:
 
 | File | When You Need It | Template Available? |
 |---|---|---|
 | `carematch/.env` (project root) | Running everything via Docker — `docker-compose.yml` reads this one | Yes — copy `carematch/.env.example` |
+| `api/.env` | Running the API manually with `uvicorn` (no Docker) — `api/db.py` loads this one itself | Yes — copy `api/.env.example` |
 | `reasoning_engine/.env` | Running the reasoning engine's own scripts directly, without Docker | Yes — copy `reasoning_engine/.env.example` |
+
+**When running on Google Cloud Run, none of these are used** — the deployed service reads its environment variables (including `DATABASE_URL`) from the Cloud Run service configuration, not from any `.env` file.
 
 | Variable | What It Does | Required When |
 |---|---|---|
@@ -305,7 +365,7 @@ There are two different `.env` files depending on how you're running things:
 | `LANGSMITH_API_KEY` | Your LangSmith key | Only if `LANGSMITH_TRACING=true` |
 | `LANGSMITH_PROJECT` | Which LangSmith project traces go into | Never — has a default |
 | `LANGSMITH_WORKSPACE_ID` | Your LangSmith workspace ID | Only if tracing is on **and** your key is an org-scoped "Service" key (starts with `lsv2_sk_`) — LangSmith rejects requests without it in that case |
-| `DATABASE_URL` | Postgres connection string (Supabase direct connection). If your password contains special characters like `@`, percent-encode them (e.g. `@` → `%40`) | Always — the API persists everything to Postgres |
+| `DATABASE_URL` | Postgres connection string for Supabase. Use the **transaction pooler** DSN — `postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres` — **not** the "direct connection" string. The direct endpoint (`db.<project-ref>.supabase.co`) resolves to IPv6 only, and cloud hosts like Cloud Run have no IPv6 path to it; the pooler provides the IPv4 address they need. If your password contains special characters like `@`, percent-encode them (e.g. `@` → `%40`) | Always — the API persists everything to Postgres |
 | `CAREMATCH_DB_SCHEMA` | Schema to put all tables in | Never — defaults to `public` (the test suite uses a throwaway schema) |
 
 **Good to know:** a missing or misconfigured LangSmith key never breaks the app itself — tracing failures are silently logged, but every real feature keeps working normally either way.
@@ -343,6 +403,17 @@ pytest test_api.py -v
 
 Both test suites are fully automated and cost nothing to run, since they never make a real call to an AI model. The API tests run against the real Supabase database but entirely inside a throwaway `carematch_test` schema — created fresh at the start and dropped again at the end, so real data in `public` is never touched and repeated runs never collide.
 
+The dashboard also has a browser end-to-end suite (Playwright, in `dashboard/tests/`) that drives the real UI against the local stack. It needs the local services running (dashboard on `http://localhost:8080`, API on `http://localhost:8000`, e.g. via `docker compose`):
+
+```bash
+# Dashboard browser tests (Playwright)
+cd dashboard
+npm install
+npx playwright test --workers=1
+```
+
+Two things to know about it: it runs against **your local** services, never the live deployment, and it makes real AI calls, so running it spends a little API credit. Always use `--workers=1` — Playwright's default parallel run fires many real LLM requests at once and makes the suite flaky against a local API.
+
 ---
 
 ## Key Decisions (and Why)
@@ -355,7 +426,7 @@ Both test suites are fully automated and cost nothing to run, since they never m
 | **Rules are written by hand, not read from a PDF automatically** | Automatically parsing rules out of messy trial documents is a much bigger, riskier problem. For now, a human converts the rulebook into a clean checklist first. |
 | **Exclusion rules are phrased as plain statements, not "must not" rules** | Testing showed the AI reasoning got confused by double-negatives. "Patient is taking Warfarin" works much better than "Patient must not be taking Warfarin." |
 | **When information is missing, the AI says so — it doesn't guess** | A wrongly excluded patient never gets a second chance. Being cautious costs less than being wrong. |
-| **A real database, not just memory** | Early versions lost everything on restart. A tool coordinators actually rely on can't forget their decisions. |
+| **A real database, not just memory** | Early versions lost everything on restart. A tool coordinators actually rely on can't forget their decisions. Data now lives in hosted Postgres on Supabase. |
 
 ---
 
@@ -367,7 +438,7 @@ Building this surfaced some genuine bugs — the useful kind, found and fixed be
 2. **The AI guessed too confidently when information was simply missing.** "No screening on file" was being read as "doesn't have the condition." Fixed by explicitly telling the AI to say "unclear" instead of guessing.
 3. **A single bad AI response could crash the whole check.** Now, if the AI's answer doesn't fit the expected format, that one rule safely falls back to "unclear" instead of breaking everything.
 4. **A leftover test service was quietly stealing web traffic meant for the real system**, because both were using the same computer port. Fixed by removing the old service entirely and building monitoring directly into the real system instead.
-5. **The app forgot everything every time it restarted.** All trials and assessments lived only in memory. Fixed by adding a real SQLite database — tested by actually killing the running server process and confirming the data survived.
+5. **The app forgot everything every time it restarted.** All trials and assessments lived only in memory. Fixed by adding a real SQLite database — tested by actually killing the running server process and confirming the data survived. That database was later moved to hosted Postgres on Supabase (see [project_summary.md](./project_summary.md)), so the data now survives a hard kill of the whole app machine too.
 
 *(Full details of each issue, exactly what caused it and how it was proven fixed, are in [project_summary.md](./project_summary.md).)*
 

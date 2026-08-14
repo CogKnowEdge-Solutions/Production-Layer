@@ -121,9 +121,9 @@ pip install -r requirements.txt -r ../reasoning_engine/requirements.txt
 Every assessment makes a real AI call. Create a file named `.env` right here inside the `api` folder (not the top-level one — this backend reads its own local `.env`) with:
 ```
 ANTHROPIC_API_KEY=your-real-key-here
-DATABASE_URL=postgresql://postgres:your-real-password-here@db.your-project.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres.your-project-ref:your-real-password-here@aws-0-your-region.pooler.supabase.com:6543/postgres
 ```
-(The API persists everything to the Supabase Postgres database it connects to with `DATABASE_URL`. If your password contains special characters like `@`, percent-encode them, e.g. `@` → `%40`.)
+(The API persists everything to the Supabase Postgres database it connects to with `DATABASE_URL`. Use the **transaction pooler** connection string — the "direct connection" host `db.<project-ref>.supabase.co` resolves to IPv6 only, which Docker and cloud hosts often can't reach. If your password contains special characters like `@`, percent-encode them, e.g. `@` → `%40`.)
 
 Then start it:
 ```bash
@@ -182,8 +182,38 @@ See the separate file `seed_data.md` for exact copy-paste examples of what to ty
 | API documentation | `http://localhost:8000/docs` | A technical, interactive list of everything the app can do behind the scenes |
 | Prometheus | `http://localhost:9090` | Raw system health numbers (mostly for technical debugging) |
 | Grafana | `http://localhost:3000` | A nicer visual dashboard of those same health numbers (login: `admin` / `admin`) |
+| The live API (deployed) | `https://carematch-api-726123996575.us-central1.run.app` | The deployed backend — visit `/health` to confirm it's alive |
+| The live dashboard (deployed) | `https://carematch-dashboard-726123996575.us-central1.run.app` | The deployed coordinator's screen |
 
 Want click-by-click instructions for Prometheus and Grafana? See `monitoring_guide.md`.
+
+---
+
+## Step 8 — Deploying to the Cloud (Optional): Cloud Run
+
+Everything so far runs on your own computer. If you want the app reachable from anywhere, the whole stack can be deployed to **Google Cloud Run**. This is optional — it needs a Google Cloud account and the `gcloud` command-line tool.
+
+The versions deployed during this project are live at:
+
+- **API:** `https://carematch-api-726123996575.us-central1.run.app`
+- **Dashboard:** `https://carematch-dashboard-726123996575.us-central1.run.app`
+
+(Project `infra-window-477206-f2`, region `us-central1`.)
+
+1. **Set up `gcloud`** (once): install the Google Cloud SDK, then run `gcloud auth login` and `gcloud config set project infra-window-477206-f2`.
+2. **Deploy the API.** From the `CareMatch-Prototype` folder (the one with the top-level `Dockerfile`):
+   ```bash
+   gcloud run deploy carematch-api --source . --region us-central1 --allow-unauthenticated
+   ```
+   The API's environment variables (including `DATABASE_URL`) come from the deploy configuration, not from a `.env` file — set them with `gcloud run services update carematch-api --set-env-vars ...`. **Use the Supabase transaction pooler connection string** (see the note in Step 3 — the direct endpoint is IPv6-only and Cloud Run can't reach it).
+3. **Deploy the dashboard.** This one is a two-step build-and-deploy, because the dashboard's API URL is baked in at build time. From the same folder:
+   ```bash
+   gcloud builds submit . --config cloudbuild.dashboard.yaml
+   gcloud run deploy carematch-dashboard --image us-central1-docker.pkg.dev/infra-window-477206-f2/cloud-run-source-deploy/carematch-dashboard --region us-central1 --allow-unauthenticated
+   ```
+   `cloudbuild.dashboard.yaml` builds `dashboard/Dockerfile` with the live API URL as a build argument. **Don't use `gcloud run deploy carematch-dashboard --source ./dashboard`** — the Dockerfile copies `dashboard/...` (it needs the repo root as build context) and Cloud Run deploy has no `--build-arg` flag, so the deployed page would try to fetch from `http://localhost:8000`.
+
+The deployed stack is the same real system — real Supabase Postgres, real Anthropic calls, real API credits. One difference: **Prometheus and Grafana run only in local Docker**. The live deployment exposes the API's `/metrics` endpoint publicly, but nothing scrapes it.
 
 ---
 

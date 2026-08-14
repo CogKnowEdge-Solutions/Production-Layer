@@ -187,4 +187,4 @@ You should now see `assessments_total` above zero and the graph bumping. If it's
 
 ---
 
-*This guide matches the actual configuration in `prometheus_config.yml` and `docker-compose.yml`: Prometheus runs at http://localhost:9090, Grafana at http://localhost:3000, and both keep their data in named volumes.*
+*This guide matches the actual configuration in `prometheus_config.yml` and `docker-compose.yml`: Prometheus runs at http://localhost:9090, Grafana at http://localhost:3000, and both keep their data in named volumes. The deployed Cloud Run version of the API also exposes `/metrics` (and `/health`) publicly, but the Prometheus/Grafana setup described here is local-Docker-only — nothing scrapes the live instance.*

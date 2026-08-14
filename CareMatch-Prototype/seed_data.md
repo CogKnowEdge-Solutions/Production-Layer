@@ -189,6 +189,20 @@ If anything on either page is missing or different from above, that's worth inve
 
 ---
 
+## Step 4 — (Optional) Flag One for Needs More Review
+
+This walks through the "Needs More Review" coordinator decision and its confirmation screen:
+
+1. Go to **Assessment History** and click `PT-1001` to open it in Assessment Review.
+2. Click **Needs More Review**, then click **Flag for further review** (the reason is optional).
+3. You should see a **"Flagged for further review"** confirmation, with the note "You can return to this assessment anytime once you have what you need." — and, deliberately, **no Accept or Deny buttons**. This is the intended UX: right after flagging, the screen shows a clean confirmation instead of immediately offering the final decision buttons again.
+4. Navigate away (e.g. to **Assessment History**), then click `PT-1001` again to reopen it. This time you *should* see "Finalize this decision" with **Accept** and **Deny** buttons — the finalize controls return on a genuine return visit, because the assessment is flagged but not final.
+5. Click **Accept**. The screen shows "Final decision."
+
+If step 3 still shows Accept/Deny immediately after flagging — or step 4 shows the confirmation again on a return visit — that's a regression worth reporting.
+
+---
+
 ## What To Do If a Result Looks Wrong
 
 1. Click into the **Assessment Review** screen and read the **evidence quote** shown for each rule — this tells you exactly what the AI based its answer on

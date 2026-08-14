@@ -1,6 +1,6 @@
 # CareMatch API — Project Summary
 
-**Status: Prototype complete through Phase 5 (simulated). Phases 6-7 require real-world adoption, not more code.**
+**Status: Prototype complete through Phase 5 (simulated), and deployed live on Google Cloud Run. Phases 6-7 require real-world adoption, not more code.**
 
 This document is the single narrative summary of the whole project — what it is, what got built, what actually broke and got fixed, and what the real, honest results are. Everything described here was actually run and verified, not just written and assumed to work.
 
@@ -38,6 +38,8 @@ CareMatch is a lightweight reasoning layer, not a black box. It never gives a fl
 | **API** | FastAPI doorway — register trials, run assessments, list assessment history, record coordinator decisions | ✅ Built, 20/20 tests passing |
 | **Dashboard** | React/TanStack Start UI — New Assessment, Assessment Review, Trial Setup, Trials, Assessment History | ✅ Built, wired to the real API, browser-tested |
 | **Docker** | All services containerized, one `docker-compose up` starts everything | ✅ 4 containers running together |
+| **Deployment** | Live on Google Cloud Run — API and dashboard reachable from anywhere (URLs in the README) | ✅ Deployed and health-checked |
+| **Browser E2E** | Playwright suite driving the real UI against the local stack | ✅ Passes with `--workers=1` |
 | **Observability** | Prometheus + Grafana, built into the real API (not a separate toy service) | ✅ Real metrics, real dashboard |
 
 ## Architecture
@@ -48,7 +50,7 @@ flowchart TD
     DASH -- HTTP --> API[API<br/>FastAPI]
     API -- exposes /metrics --> PROM[Prometheus<br/>system health numbers over time]
     PROM --> GRAF[Grafana]
-    API -- reads / writes --> DB[(SQLite database<br/>trials, assessments, decisions)]
+    API -- reads / writes --> DB[(Postgres on Supabase<br/>trials, assessments, decisions)]
     API --> ENG[Reasoning Engine<br/>Python]
     ENG -- one call per rule --> LLM[LLM<br/>Anthropic Claude Haiku, direct]
     ENG -. every real AI call also logged .-> LS[LangSmith<br/>AI decision history]
@@ -121,7 +123,9 @@ A later senior review of the finished prototype led to another round of real wor
 
 ### SQLite persistence — the app stopped forgetting
 
-The prototype originally kept trials and assessments in memory, so restarting the app wiped everything. Trials, assessments, and coordinator decisions now live in a real SQLite database (`api/db.py`). This was proven with the harshest test available: we actually killed the running server process, restarted it, and confirmed the data came back exactly as it was.
+The prototype originally kept trials and assessments in memory, so restarting the app wiped everything. Trials, assessments, and coordinator decisions then moved into a real SQLite database (`api/db.py`). This was proven with the harshest test available: we actually killed the running server process, restarted it, and confirmed the data came back exactly as it was.
+
+*(Superseded — see "Postgres (Supabase) — persistence moved to the cloud" below for where the data lives today.)*
 
 ### LangSmith tracing — the AI's reasoning is now recorded
 
@@ -144,7 +148,7 @@ The decision system was redesigned from two options ("Approve" / "Override") to 
 - **Accept** and **Deny** are final — once recorded, the assessment is locked.
 - **Needs More Review** is deliberately not a dead end. It keeps the assessment open and flagged, so the coordinator can come back later and finish with a real Accept or Deny once the missing information arrives.
 
-The hard part was the data already in the database. Older assessments stored decisions as `"approved"` or `"overridden"`, and the new code had to keep reading those rows without crashing — and without rewriting them, since they are records of what actually happened. The solution: the API only accepts the three new values on input, but tolerates any stored value on output. Proven with the real database: an old `"approved"` row still loads and displays correctly today.
+The hard part was the data already in the database. Older assessments stored decisions as `"approved"` or `"overridden"`, and the new code had to keep reading those rows without crashing — and without rewriting them, since they are records of what actually happened. The solution: the API only accepts the three new values on input, but tolerates any stored value on output. Proven with the real database: an old `"approved"` row still loads and displays correctly today. *(The refined confirmation flow for the Needs More Review option is described below in "Needs More Review — flagged, not bounced".)*
 
 ### The Trials list page
 
@@ -185,6 +189,27 @@ While an undecided assessment is loaded, the Review page blocks navigation away 
 
 CareMatch now calls **Anthropic directly** and nothing else. The `LLM_PROVIDER` environment variable and all OpenRouter wiring were deleted when the second provider was removed; a repo-wide grep for `openrouter|OpenRouter|OPENROUTER` returns **0 matches** in `CareMatch-Prototype` (excluding `node_modules`, `.git`, `test-results`, `.output`, `__pycache__`). `llm_client.py`'s `call_llm` is the single, unambiguously named entry point — renamed from the earlier `call_real_llm` (grep confirms 0 remaining occurrences) — and wrapped with LangSmith tracing so every real call is auditable.
 
+### Postgres (Supabase) — persistence moved to the cloud
+
+SQLite worked, but the data lived in a single file on the app server — a hard kill of the whole machine would still lose everything. Persistence now lives in a hosted **Postgres database on Supabase** (`api/db.py`). The five-table model, the foreign keys, and the `ON DELETE CASCADE` behaviour were preserved unchanged; the difference is the data now survives a hard kill of the app process, which is tested explicitly rather than assumed. The connection uses the **transaction pooler** DSN (`...@aws-0-<region>.pooler.supabase.com:6543/postgres`) rather than Supabase's "direct connection" string — the direct endpoint (`db.<project-ref>.supabase.co`) resolves to **IPv6 only** (verified with DNS: an AAAA record and no A record), and cloud hosts like Cloud Run have no IPv6 path to it. The pooler serves the IPv4 address those hosts need. The test suite keeps running against the same database inside a throwaway `carematch_test` schema, so real `public` data is never touched.
+
+### Cloud Run — the app went live
+
+The whole stack is deployed to Google Cloud Run (project `infra-window-477206-f2`, region `us-central1`): the API at `https://carematch-api-726123996575.us-central1.run.app` and the dashboard at `https://carematch-dashboard-726123996575.us-central1.run.app`. Two real bugs surfaced during deployment:
+
+1. **The first API deployment crashed at startup, and the cause was a malformed `DATABASE_URL`, not a port problem.** The revision's `DATABASE_URL` had trailing lines embedded in it (`ANTHROPIC_API_KEY=...` and `ANTHROPIC_MODEL=...`), which made the connection string unparseable — `psycopg2` raised `EINVALIDUSERINFO` when `api/main.py` called `db.init_db()`, so the container never bound its port. Fixing the env-var value (and giving the top-level `Dockerfile` an explicit `${PORT:-8000}` fallback) got it healthy.
+2. **The dashboard's port handling was hardcoded, and Nitro's own fallback would have been wrong.** The bundled Nitro node-server reads `NITRO_PORT`, then `PORT`, and falls back to **3000** if both are unset (verified in the built `index.mjs`). The dashboard's `Dockerfile` now runs `NITRO_PORT=${PORT:-8080} exec node .output/server/index.mjs`, mapping Cloud Run's `PORT` onto Nitro correctly.
+
+Two deployment details worth remembering. First, the dashboard's API URL (`VITE_API_BASE_URL`) is baked into the client bundle at **build time**, so the dashboard is deployed in two steps: `gcloud builds submit . --config cloudbuild.dashboard.yaml` (which passes the live API URL as a build arg), then `gcloud run deploy carematch-dashboard --image us-central1-docker.pkg.dev/infra-window-477206-f2/cloud-run-source-deploy/carematch-dashboard`. `gcloud run deploy carematch-dashboard --source ./dashboard` does not work here — the Dockerfile needs the repo root as build context and Cloud Run deploy has no `--build-arg` flag. Second, the API's CORS allow-list now includes both dashboard origins (localhost and the live URL), verified by the `access-control-allow-origin` response header echoing the dashboard origin.
+
+### Needs More Review — flagged, not bounced
+
+When a coordinator chooses **Needs More Review**, the Review page now shows a clean confirmation — "Flagged for further review", with "You can return to this assessment anytime once you have what you need." — instead of immediately showing the Accept/Deny buttons again. The distinction is deliberately narrow: the confirmation appears only in the exact moment this browser session submitted the flag (`justFlagged` is set inside the mutation's `onSuccess`), so an assessment that already has `needs_more_review` when it loads — via URL, Assessment History, or the saved-id redirect — still shows the "Finalize this decision" panel with Accept/Deny. One regression caught on the way: `dashboard/vite.config.ts` used `process.env.NITRO_PRESET`, which TypeScript rejects with ts(4111) (property access on `process.env` is an error; only bracket notation is allowed) — fixed as `process.env["NITRO_PRESET"]`.
+
+### Dashboard end-to-end tests (Playwright)
+
+The dashboard now has a browser test suite (`dashboard/tests/`), written with Playwright, that drives the real UI against the local stack — dashboard at `http://localhost:8080`, API at `http://localhost:8000` (via `docker compose`). The first spec (`needs-more-review.spec.ts`) proves both sides of the confirmation UX above: just-submitted shows the confirmation with **no** Accept/Deny buttons, and a genuine return visit (leave the page, reopen via Assessment History) shows "Finalize this decision" with Accept/Deny — plus a regression check that Accept still finalizes. It makes real LLM calls, so it must run against local services with `npx playwright test --workers=1`; Playwright's default parallel run fires many real assessments at once and makes the suite flaky against a local API.
+
 ---
 
 ## What's Genuinely Left (Not Code)
@@ -204,7 +229,7 @@ Both of these need an actual organization adopting this system — they are not 
 flowchart TD
     ROOT[carematch/] --> RE[reasoning_engine/<br/>Phase 1 — core AI reasoning logic]
     RE --> GR[guardrails.py<br/>Input + output safety checks around the AI calls]
-    ROOT --> API[api/<br/>Phase 2 — FastAPI doorway + SQLite persistence + Prometheus metrics]
+    ROOT --> API[api/<br/>Phase 2 — FastAPI doorway + Postgres (Supabase) persistence + Prometheus metrics]
     ROOT --> DASH[dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials, Assessment History]
     ROOT --> EV[run_evaluation.py<br/>The 12-patient accuracy test script]
     ROOT --> PS[project_summary.md<br/>This file, at the project root alongside README.md]
@@ -212,6 +237,8 @@ flowchart TD
     ROOT --> SEED[seed_data.md<br/>Copy-paste examples to try once the app is running]
     ROOT --> MON[monitoring_guide.md<br/>What Prometheus and Grafana are, and how to use them]
     ROOT --> DC[docker-compose.yml<br/>Runs the full stack: api, dashboard, prometheus, grafana]
+    ROOT --> CDF[Dockerfile<br/>Cloud Run image for the API — listens on ${PORT:-8000}]
+    ROOT --> CBD[cloudbuild.dashboard.yaml<br/>Builds the dashboard image with the live API URL baked in]
     ROOT --> PC[prometheus_config.yml<br/>Monitoring config — data retention is a command-line flag, not set here]
     ROOT --> README[README.md<br/>Living technical status, updated throughout the build]
 ```

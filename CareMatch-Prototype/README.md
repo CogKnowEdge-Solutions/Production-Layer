@@ -339,7 +339,7 @@ gcloud run deploy carematch-dashboard \
 
 ### CORS and health
 
-`api/main.py` whitelists both dashboard origins — the local dev server (`http://localhost:8080`) and the live Cloud Run dashboard — so the browser can call the API from either one. The live API also exposes `/health` and `/metrics`; local Prometheus scrapes the latter via the `carematch-api-live` job (see [monitoring_guide.md](./monitoring_guide.md)).
+`api/main.py` whitelists both dashboard origins — the local dev server (`http://localhost:8080`) and the live Cloud Run dashboard — so the browser can call the API from either one. The live API also exposes `/health` and `/metrics`; local Prometheus scrapes both the live endpoint (job `carematch-api-live`) and, when you run the stack locally, your local API (job `carematch-api`) — see [monitoring_guide.md](./monitoring_guide.md).
 
 ---
 

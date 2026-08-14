@@ -4,6 +4,11 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
+  - job_name: "carematch-api"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api:8000"]
+
   - job_name: "carematch-api-live"
     metrics_path: "/metrics"
     static_configs:

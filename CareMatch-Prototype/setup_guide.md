@@ -213,7 +213,7 @@ The versions deployed during this project are live at:
    ```
    `cloudbuild.dashboard.yaml` builds `dashboard/Dockerfile` with the live API URL as a build argument. **Don't use `gcloud run deploy carematch-dashboard --source ./dashboard`** — the Dockerfile copies `dashboard/...` (it needs the repo root as build context) and Cloud Run deploy has no `--build-arg` flag, so the deployed page would try to fetch from `http://localhost:8000`.
 
-The deployed stack is the same real system — real Supabase Postgres, real Anthropic calls, real API credits. One difference: **Prometheus and Grafana run only in local Docker**. The live deployment exposes the API's `/metrics` endpoint publicly, and your local Prometheus scrapes it via the `carematch-api-live` job (see `monitoring_guide.md`) — so the charts show the deployed API's numbers, but only while your machine runs Docker.
+The deployed stack is the same real system — real Supabase Postgres, real Anthropic calls, real API credits. One difference: **Prometheus and Grafana run only in local Docker**. The live deployment exposes the API's `/metrics` endpoint publicly, and your local Prometheus scrapes both it (job `carematch-api-live`) and, when the stack is running, your local API (job `carematch-api`) — see `monitoring_guide.md`. The charts show data, but only while your machine runs Docker.
 
 ---
 

@@ -14,7 +14,7 @@ There are two other ways to look at what the app did, and it helps to know which
 - **LangSmith** (only if you turned tracing on): *"Why did the AI decide what it decided?"* — it stores the actual reasoning behind every rule.
 - **Prometheus**: *"How is the whole system doing over time?"* — the big-picture health numbers.
 
-You don't have to start Prometheus or do anything to make it record. It starts itself when you run the command below, and it checks on the app automatically every 15 seconds:
+You don't have to start Prometheus or do anything to make it record. It starts itself when you run the command below, and it checks on the **deployed** CareMatch API automatically every 15 seconds:
 
 ```
 docker compose up -d --build
@@ -37,10 +37,35 @@ You should see two rows:
 
 | Job | What it watches | Healthy if |
 |---|---|---|
-| `carematch-api` | The API itself — the engine behind the app | green dot + **UP** |
+| `carematch-api-live` | The **deployed** CareMatch API on Google Cloud Run — this project's Prometheus scrapes the live URL's public `/metrics` endpoint, not a local server | green dot + **UP** |
 | `carematch-prometheus` | Prometheus watching itself | green dot + **UP** |
 
-A healthy screen shows both rows with a green circle and the word **UP**. If a row shows red and **DOWN**, something is wrong — most commonly the app isn't running (start it again), or the API just restarted and Prometheus hasn't re-checked yet. It re-checks every 15 seconds, so give it a moment before worrying.
+A healthy screen shows both rows with a green circle and the word **UP**. If a row shows red and **DOWN**, something is wrong — most commonly the deployed API just restarted (a new Cloud Run revision, or waking from scale-to-zero), or Prometheus hasn't re-checked yet. It re-checks every 15 seconds, so give it a moment before worrying.
+
+### What it scrapes — the deployed API only
+
+`prometheus_config.yml` is deliberately minimal: it scrapes **only the deployed Cloud Run API**, not any local server. The job points straight at the live URL:
+
+```yaml
+scrape_configs:
+  - job_name: "carematch-api-live"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["carematch-api-726123996575.us-central1.run.app"]
+```
+
+After editing `prometheus_config.yml`, reload it into the running container (the file is bind-mounted, so no rebuild is needed):
+
+```
+docker compose restart prometheus
+```
+
+A few things worth knowing:
+
+- **Which numbers you're seeing.** All the queries below answer questions about the *deployed* API — the same real system users hit, with real Supabase Postgres and real Anthropic calls.
+- **Counters reset per process instance.** Counters like `assessments_total` or `trials_registered_total` only count since the current Cloud Run process started. When Cloud Run deploys a new revision or the service wakes from scale-to-zero, those numbers start back at zero — even though the database still has all the data. `http_requests_total` (and its `rate(...)`) shows live traffic immediately, because Prometheus's own scrape every 15 seconds counts as a request.
+- **Only while your machine runs.** Prometheus and Grafana live in your local Docker stack. The scraping happens from your computer, so it records only while `docker compose` is up — it is not a 24/7 hosted monitoring service.
+- **Scraping keeps the instance warm.** Because Prometheus hits `/metrics` every 15 seconds, the deployed API can't fully sleep between real users. Harmless at this scale, but the live instance will never be completely idle.
 
 ---
 
@@ -187,4 +212,4 @@ You should now see `assessments_total` above zero and the graph bumping. If it's
 
 ---
 
-*This guide matches the actual configuration in `prometheus_config.yml` and `docker-compose.yml`: Prometheus runs at http://localhost:9090, Grafana at http://localhost:3000, and both keep their data in named volumes. The deployed Cloud Run version of the API also exposes `/metrics` (and `/health`) publicly, but the Prometheus/Grafana setup described here is local-Docker-only — nothing scrapes the live instance.*
+*This guide matches the actual configuration in `prometheus_config.yml` and `docker-compose.yml`: Prometheus runs at http://localhost:9090, Grafana at http://localhost:3000, and both keep their data in named volumes. Prometheus scrapes only the deployed Cloud Run API's public `/metrics` endpoint (job `carematch-api-live`), and the whole setup is local-Docker-only — it records while your machine runs `docker compose`, not as a 24/7 hosted service.*

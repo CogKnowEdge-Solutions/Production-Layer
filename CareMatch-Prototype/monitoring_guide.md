@@ -79,7 +79,7 @@ A few things worth knowing:
 - **The local row shows DOWN until you run the stack.** The `carematch-api` job scrapes `api:8000`, a Docker-network address that only exists while `docker compose up` is running. Before you start it (or after you stop it) that row is red — expected.
 - **Counters reset per process instance.** Counters like `assessments_total` or `trials_registered_total` only count since the current process started. When Cloud Run deploys a new revision or the service wakes from scale-to-zero, the deployed API's numbers start back at zero — even though the database still has all the data. `http_requests_total` (and its `rate(...)`) shows live traffic immediately, because Prometheus's own scrape every 15 seconds counts as a request.
 - **Only while your machine runs.** Prometheus and Grafana live in your local Docker stack. The scraping happens from your computer, so it records only while `docker compose` is up — it is not a 24/7 hosted monitoring service.
-- **Scraping keeps the deployed instance warm.** Because Prometheus hits the live `/metrics` every 15 seconds, the deployed API can't fully sleep between real users. Harmless at this scale, but the live instance will never be completely idle.
+- **Scraping keeps the deployed instance warm.** Because Prometheus hits the live `/metrics` every 15 seconds, the deployed API can't fully sleep between real users. That's harmless for occasional local dev sessions — an hour here, a few hours there — but if `docker compose` is left running continuously for many hours or days, the deployed instance stays active that whole time instead of scaling to zero. The point is the continuous uptime, not the size of the scrape requests themselves.
 
 ---
 

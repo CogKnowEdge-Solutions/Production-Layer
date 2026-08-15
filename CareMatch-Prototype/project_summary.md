@@ -227,20 +227,20 @@ Both of these need an actual organization adopting this system — they are not 
 
 ```mermaid
 flowchart TD
-    ROOT[carematch/] --> RE[reasoning_engine/<br/>Phase 1 — core AI reasoning logic]
-    RE --> GR[guardrails.py<br/>Input + output safety checks around the AI calls]
-    ROOT --> API[api/<br/>Phase 2 — FastAPI doorway + Postgres (Supabase) persistence + Prometheus metrics]
-    ROOT --> DASH[dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials, Assessment History]
-    ROOT --> EV[run_evaluation.py<br/>The 12-patient accuracy test script]
-    ROOT --> PS[project_summary.md<br/>This file, at the project root alongside README.md]
-    ROOT --> SETUP[setup_guide.md<br/>Step-by-step setup instructions]
-    ROOT --> SEED[seed_data.md<br/>Copy-paste examples to try once the app is running]
-    ROOT --> MON[monitoring_guide.md<br/>What Prometheus and Grafana are, and how to use them]
-    ROOT --> DC[docker-compose.yml<br/>Runs the full stack: api, dashboard, prometheus, grafana]
-    ROOT --> CDF[Dockerfile<br/>Cloud Run image for the API — listens on ${PORT:-8000}]
-    ROOT --> CBD[cloudbuild.dashboard.yaml<br/>Builds the dashboard image with the live API URL baked in]
-    ROOT --> PC[prometheus_config.yml<br/>Monitoring config — data retention is a command-line flag, not set here]
-    ROOT --> README[README.md<br/>Living technical status, updated throughout the build]
+    ROOT["carematch/"] --> RE["reasoning_engine/<br/>Phase 1 — core AI reasoning logic"]
+    RE --> GR["guardrails.py<br/>Input + output safety checks around the AI calls"]
+    ROOT --> API["api/<br/>Phase 2 — FastAPI doorway + Postgres (Supabase) persistence + Prometheus metrics"]
+    ROOT --> DASH["dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials, Assessment History"]
+    ROOT --> EV["run_evaluation.py<br/>The 12-patient accuracy test script"]
+    ROOT --> PS["project_summary.md<br/>This file, at the project root alongside README.md"]
+    ROOT --> SETUP["setup_guide.md<br/>Step-by-step setup instructions"]
+    ROOT --> SEED["seed_data.md<br/>Copy-paste examples to try once the app is running"]
+    ROOT --> MON["monitoring_guide.md<br/>What Prometheus and Grafana are, and how to use them"]
+    ROOT --> DC["docker-compose.yml<br/>Runs the full stack: api, dashboard, prometheus, grafana"]
+    ROOT --> CDF["Dockerfile<br/>Cloud Run image for the API — listens on ${PORT:-8000}"]
+    ROOT --> CBD["cloudbuild.dashboard.yaml<br/>Builds the dashboard image with the live API URL baked in"]
+    ROOT --> PC["prometheus_config.yml<br/>Monitoring config — data retention is a command-line flag, not set here"]
+    ROOT --> README["README.md<br/>Living technical status, updated throughout the build"]
 ```
 
 ---

@@ -225,22 +225,45 @@ Both of these need an actual organization adopting this system — they are not 
 
 ## Repository Structure
 
+Grouped by folder. The five dashboard pages (New Assessment, Assessment Review, Trial Setup, Trials, Assessment History) are listed in the *What Got Built* table above.
+
 ```mermaid
-flowchart TD
-    ROOT["carematch/"] --> RE["reasoning_engine/<br/>Phase 1 — core AI reasoning logic"]
-    RE --> GR["guardrails.py<br/>Input + output safety checks around the AI calls"]
-    ROOT --> API["api/<br/>Phase 2 — FastAPI doorway + Postgres (Supabase) persistence + Prometheus metrics"]
-    ROOT --> DASH["dashboard/<br/>Phase 3 — React/TanStack Start coordinator UI<br/>New Assessment, Assessment Review, Trial Setup, Trials, Assessment History"]
-    ROOT --> EV["run_evaluation.py<br/>The 12-patient accuracy test script"]
-    ROOT --> PS["project_summary.md<br/>This file, at the project root alongside README.md"]
-    ROOT --> SETUP["setup_guide.md<br/>Step-by-step setup instructions"]
-    ROOT --> SEED["seed_data.md<br/>Copy-paste examples to try once the app is running"]
-    ROOT --> MON["monitoring_guide.md<br/>What Prometheus and Grafana are, and how to use them"]
-    ROOT --> DC["docker-compose.yml<br/>Runs the full stack: api, dashboard, prometheus, grafana"]
-    ROOT --> CDF["Dockerfile<br/>Cloud Run image for the API — listens on ${PORT:-8000}"]
-    ROOT --> CBD["cloudbuild.dashboard.yaml<br/>Builds the dashboard image with the live API URL baked in"]
-    ROOT --> PC["prometheus_config.yml<br/>Monitoring config — data retention is a command-line flag, not set here"]
-    ROOT --> README["README.md<br/>Living technical status, updated throughout the build"]
+%%{init: {"flowchart": {"nodeSpacing": 6, "rankSpacing": 30, "padding": 8}}}%%
+flowchart LR
+    ROOT["carematch/"] --> RE
+    ROOT --> API
+    ROOT --> DASH
+    ROOT --> RT_DOCS
+    ROOT --> RT_CFG
+    ROOT --> EV["run_evaluation.py"]
+
+    subgraph RE["reasoning_engine/ — Phase 1"]
+        RE_GR["guardrails.py"]
+    end
+
+    subgraph API["api/ — Phase 2"]
+        API_MAIN["main.py"]
+        API_DB["db.py"]
+    end
+
+    subgraph DASH["dashboard/ — Phase 3"]
+        DASH_SRC["src/"]
+    end
+
+    subgraph RT_DOCS["project root — docs"]
+        RT_PS["project_summary.md"]
+        RT_SETUP["setup_guide.md"]
+        RT_SEED["seed_data.md"]
+        RT_MON["monitoring_guide.md"]
+        RT_RM["README.md"]
+    end
+
+    subgraph RT_CFG["project root — config"]
+        RT_DC["docker-compose.yml"]
+        RT_DF["Dockerfile"]
+        RT_CBD["cloudbuild.dashboard.yaml"]
+        RT_PC["prometheus_config.yml"]
+    end
 ```
 
 ---

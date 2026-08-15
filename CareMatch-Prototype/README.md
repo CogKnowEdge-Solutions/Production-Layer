@@ -163,43 +163,70 @@ flowchart LR
 
 ## Project Structure
 
-This shows the key files — a few generated/config files (requirements.txt, test_data/) are left out to keep this readable.
+The folder layout only — each box is one file or folder. What each file does is covered in the README section that describes it (Guardrails, The API, Testing, Deployment, Monitoring) and in the guides linked above. Two notes:
+
+- **`observability/` is retired** — it was an early standalone monitoring test; real monitoring now lives directly inside `api/main.py`.
+- **`run_evaluation.py`** is the 12-patient accuracy test script — its results are in [project_summary.md](./project_summary.md).
 
 ```mermaid
-flowchart TD
-    ROOT["carematch/"] --> RE["reasoning_engine/<br/>The AI brain — reads one rule + one patient record, gives an answer"]
-    RE --> RE_SCHEMA["schema.py<br/>Defines the exact shape of every answer — no shortcuts allowed"]
-    RE --> RE_PROTO["protocol.py<br/>Defines what a trial's rulebook looks like"]
-    RE --> RE_LLM["llm_client.py<br/>The actual call to the AI model, with retries, safety checks, and AI tracing"]
-    RE --> RE_ENG["engine.py<br/>Loops through all the rules and combines the results"]
-    RE --> RE_RUN["run_real_assessment.py<br/>Script to test real AI reasoning yourself, using your own API key"]
-    RE --> RE_TEST["test_engine.py<br/>Automated tests — no API key needed"]
-    RE --> RE_REQ["requirements.txt"]
-    RE --> RE_ENV[".env.example<br/>Copy to .env if running this folder's scripts on their own"]
-    RE --> RE_DATA["test_data/<br/>Sample patient records used by the automated tests"]
-    ROOT --> API["api/<br/>The doorway — turns the reasoning engine into a web service"]
-    API --> API_MAIN["main.py<br/>All the API endpoints, plus request logging"]
-    API --> API_DB["db.py<br/>Postgres (Supabase) persistence — trials, assessments, decisions survive restarts"]
-    API --> API_TEST["test_api.py<br/>Automated tests for the API itself"]
-    API --> API_DOCKER["Dockerfile"]
-    API --> API_REQ["requirements.txt"]
-    ROOT --> DASH["dashboard/<br/>The webpage the coordinator actually uses"]
-    DASH --> DASH_SRC["src/"]
-    DASH_SRC --> DASH_ROUTES["routes/<br/>The 5 pages: New Assessment, Assessment Review, Trial Setup, Trials, Assessment History"]
-    DASH_SRC --> DASH_COMP["components/<br/>Reusable pieces, like the rule result cards"]
-    DASH_SRC --> DASH_HOOKS["hooks/<br/>Small reusable bits of frontend logic"]
-    DASH_SRC --> DASH_API["lib/api.ts<br/>The code that talks to the real API"]
-    ROOT --> OBS["observability/<br/>Retired — an early standalone monitoring test.<br/>Real monitoring now lives directly inside api/main.py"]
-    ROOT --> EV["run_evaluation.py<br/>The 12-patient accuracy test script — see project_summary.md for results"]
-    ROOT --> PS["project_summary.md<br/>The full story: real bugs found, decisions made, evaluation results"]
-    ROOT --> SETUP["setup_guide.md<br/>Step-by-step setup instructions for a first-time run"]
-    ROOT --> SEED["seed_data.md<br/>Copy-paste examples to try once the app is running"]
-    ROOT --> MON["monitoring_guide.md<br/>What Prometheus and Grafana are, and how to look at the numbers yourself"]
-    ROOT --> DC["docker-compose.yml<br/>Starts everything — API, dashboard, monitoring — with one command"]
-    ROOT --> CDF["Dockerfile<br/>Cloud Run image for the API — listens on ${PORT:-8000}"]
-    ROOT --> CBD["cloudbuild.dashboard.yaml<br/>Builds the dashboard image with the live API URL baked in"]
-    ROOT --> PC["prometheus_config.yml<br/>Tells Prometheus which services to watch, including itself"]
-    ROOT --> RM["README.md<br/>You are here, at the project root"]
+%%{init: {"flowchart": {"nodeSpacing": 6, "rankSpacing": 30, "padding": 8}}}%%
+flowchart LR
+    ROOT["carematch/"] --> RE_CORE
+    ROOT --> RE_SCRIPTS
+    ROOT --> API
+    ROOT --> DASH
+    ROOT --> RT_DOCS
+    ROOT --> RT_CFG
+    ROOT --> EV["run_evaluation.py"]
+    ROOT --> OBS["observability/"]
+
+    subgraph RE_CORE["reasoning_engine/ — core logic & safety"]
+        RE_SCHEMA["schema.py"]
+        RE_PROTO["protocol.py"]
+        RE_ENG["engine.py"]
+        RE_LLM["llm_client.py"]
+        RE_GR["guardrails.py"]
+    end
+
+    subgraph RE_SCRIPTS["reasoning_engine/ — scripts, tests & data"]
+        RE_RUN["run_real_assessment.py"]
+        RE_TEST["test_engine.py"]
+        RE_REQ["requirements.txt"]
+        RE_ENV[".env.example"]
+        RE_DATA["test_data/"]
+    end
+
+    subgraph API["api/ — web service"]
+        API_MAIN["main.py"]
+        API_DB["db.py"]
+        API_TEST["test_api.py"]
+        API_DOCK["Dockerfile"]
+        API_REQ["requirements.txt"]
+    end
+
+    subgraph DASH["dashboard/ — web UI"]
+        direction TB
+        DASH_SRC["src/"]
+        DASH_SRC --> DASH_ROUTES["routes/"]
+        DASH_SRC --> DASH_COMP["components/"]
+        DASH_SRC --> DASH_HOOKS["hooks/"]
+        DASH_SRC --> DASH_API["lib/api.ts"]
+    end
+
+    subgraph RT_DOCS["project root — docs"]
+        RT_RM["README.md"]
+        RT_PS["project_summary.md"]
+        RT_SETUP["setup_guide.md"]
+        RT_SEED["seed_data.md"]
+        RT_MON["monitoring_guide.md"]
+    end
+
+    subgraph RT_CFG["project root — deployment & config"]
+        RT_DC["docker-compose.yml"]
+        RT_DF["Dockerfile"]
+        RT_CBD["cloudbuild.dashboard.yaml"]
+        RT_PC["prometheus_config.yml"]
+    end
 ```
 
 ---
